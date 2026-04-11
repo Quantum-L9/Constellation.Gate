@@ -18,7 +18,7 @@ It is not a public endpoint.
 
 ```text
 POST /v1/admin/register
-````
+```
 
 Headers:
 

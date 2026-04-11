@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
+# Monorepo default: constellation-node-sdk is a sibling of this package (Gate repo root)
 SDK_REPO_PATH="${SDK_REPO_PATH:-../constellation-node-sdk}"
 TARGET_DIR="contracts"
 
