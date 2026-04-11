@@ -1,0 +1,4 @@
+# Suite 6: local symlinks to Dropbox GlobalCommands (regenerate via setup_workspace_symlinks.sh)
+.cursor-commands
+.cursor/commands
+.cursor/rules

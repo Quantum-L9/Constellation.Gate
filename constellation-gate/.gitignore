@@ -61,3 +61,7 @@ docker-data/
 # Suite 6 / Cursor (local; template lives in GlobalCommands)
 .cursorrules
 .suite6-config.json
+# Symlinks to GlobalCommands — not portable; run setup_workspace_symlinks.sh locally
+.cursor-commands
+.cursor/commands
+.cursor/rules
