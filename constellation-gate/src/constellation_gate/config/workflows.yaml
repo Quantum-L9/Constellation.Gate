@@ -1,0 +1,8 @@
+workflows:
+  full_pipeline:
+    description: Enrich then score an entity
+    steps:
+      - action: enrich
+        payload_transform: merge_payload
+      - action: score
+        payload_transform: merge_results

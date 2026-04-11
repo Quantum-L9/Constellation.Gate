@@ -1,0 +1,17 @@
+priorities:
+  P0:
+    numeric: 0
+    description: emergency / system-critical
+  P1:
+    numeric: 1
+    description: interactive high-priority work
+  P2:
+    numeric: 2
+    description: default operational work
+  P3:
+    numeric: 3
+    description: deferred / low-urgency work
+
+defaults:
+  request_priority: P2
+  workflow_step_priority: P2
