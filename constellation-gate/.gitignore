@@ -57,3 +57,7 @@ crash.log
 
 # Docker
 docker-data/
+
+# Suite 6 / Cursor (local; template lives in GlobalCommands)
+.cursorrules
+.suite6-config.json
