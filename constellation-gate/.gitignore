@@ -58,10 +58,6 @@ crash.log
 # Docker
 docker-data/
 
-# Suite 6 / Cursor (local; template lives in GlobalCommands)
+# If Suite 6 files are recreated here by mistake, keep them untracked (canonical copy is repo root).
 .cursorrules
 .suite6-config.json
-# Symlinks to GlobalCommands — not portable; run setup_workspace_symlinks.sh locally
-.cursor-commands
-.cursor/commands
-.cursor/rules

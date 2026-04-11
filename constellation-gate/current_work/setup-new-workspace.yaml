@@ -514,6 +514,12 @@ startup_sequence:
 # ═══════════════════════════════════════════════════════════
 #   PHASE 3: INSTALLATION
 # ═══════════════════════════════════════════════════════════
+#
+# Monorepo note (Constellation.Gate): run step_1 + step_2 with cwd = git root that
+# CONTAINS the `constellation-gate/` folder — NOT from inside `constellation-gate/`.
+# Running installation twice at two levels creates duplicate .cursor-commands trees in
+# the sidebar. Open the Cursor workspace at that single root. (Suite 6 v2.1+ only symlinks
+# .cursor-commands → GlobalCommands; rules/commands are .cursor-commands/rules|commands.)
 
 installation:
   step_1:

@@ -1,4 +1,8 @@
-# Suite 6: local symlinks to Dropbox GlobalCommands (regenerate via setup_workspace_symlinks.sh)
+# Suite 6: local symlink to Dropbox GlobalCommands (regenerate via setup_workspace_symlinks.sh)
 .cursor-commands
-.cursor/commands
-.cursor/rules
+# Optional local Cursor project dir (not created by Suite 6 symlink script v2.1+)
+.cursor/
+
+# Local Cursor / Suite 6 (templates from GlobalCommands; do not commit)
+.cursorrules
+.suite6-config.json
