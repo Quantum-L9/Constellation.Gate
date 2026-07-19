@@ -19,7 +19,9 @@ class PriorityPacketQueue:
     """
 
     def __init__(self) -> None:
-        self._queue: asyncio.PriorityQueue[tuple[int, int, TransportPacket]] = asyncio.PriorityQueue()
+        self._queue: asyncio.PriorityQueue[tuple[int, int, TransportPacket]] = (
+            asyncio.PriorityQueue()
+        )
         self._sequence = count()
 
     async def put(self, packet: TransportPacket) -> None:

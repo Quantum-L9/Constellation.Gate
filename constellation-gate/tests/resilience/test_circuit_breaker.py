@@ -39,9 +39,7 @@ async def test_circuit_breaker_opens_after_failure_threshold() -> None:
 @pytest.mark.asyncio
 async def test_circuit_breaker_half_open_then_closes_on_success() -> None:
     clock = _FakeClock(0.0)
-    breaker = CircuitBreaker(
-        failure_threshold=1, recovery_timeout_seconds=5.0, time_source=clock
-    )
+    breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_seconds=5.0, time_source=clock)
 
     async def fail():
         raise TimeoutError("temporary")
@@ -68,9 +66,7 @@ async def test_circuit_breaker_half_open_then_closes_on_success() -> None:
 @pytest.mark.asyncio
 async def test_circuit_breaker_half_open_reopens_on_failure() -> None:
     clock = _FakeClock(0.0)
-    breaker = CircuitBreaker(
-        failure_threshold=1, recovery_timeout_seconds=5.0, time_source=clock
-    )
+    breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_seconds=5.0, time_source=clock)
 
     async def fail():
         raise TimeoutError("temporary")

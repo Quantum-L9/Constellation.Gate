@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
 
 from constellation_gate.orchestration.workflow_engine import WorkflowEngine
 from constellation_gate.orchestration.workflow_models import WorkflowDefinition, WorkflowStep
 from constellation_gate.services.execute_service import ExecuteService
-from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
 
 
 class StaticValidator:

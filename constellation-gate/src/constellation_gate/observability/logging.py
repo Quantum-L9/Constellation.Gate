@@ -45,7 +45,9 @@ def packet_log_context(packet: TransportPacket) -> dict[str, Any]:
     }
 
 
-def log_packet_event(logger: logging.Logger, *, event: str, packet: TransportPacket, **extra: Any) -> None:
+def log_packet_event(
+    logger: logging.Logger, *, event: str, packet: TransportPacket, **extra: Any
+) -> None:
     context = packet_log_context(packet)
     context.update(extra)
     logger.info(

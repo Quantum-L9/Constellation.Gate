@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.orchestration.workflow_engine import WorkflowEngine
 from constellation_node_sdk.transport.packet import TransportPacket
+
+from constellation_gate.orchestration.workflow_engine import WorkflowEngine
 
 
 class WorkflowService:

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from constellation_gate.schemas.workflow import WorkflowConfigSchema, WorkflowSchema, WorkflowStepSchema
+from constellation_gate.schemas.workflow import (
+    WorkflowConfigSchema,
+    WorkflowSchema,
+    WorkflowStepSchema,
+)
 
 
 def test_workflow_step_schema_normalizes_action_and_transform() -> None:

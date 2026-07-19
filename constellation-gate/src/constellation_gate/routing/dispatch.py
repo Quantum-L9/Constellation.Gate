@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from constellation_node_sdk.transport.hop_trace import make_dispatch_hop, make_ingress_hop
+from constellation_node_sdk.transport.packet import TransportPacket
+from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 from constellation_gate.boundary.routing_policy import validate_gate_dispatch_policy
 from constellation_gate.routing.node_registry import NodeRegistry
 from constellation_gate.routing.resolver import RouteResolver
 from constellation_gate.runtime.node_limits import PerNodeLimiterManager
-from constellation_node_sdk.transport.hop_trace import make_dispatch_hop, make_ingress_hop
-from constellation_node_sdk.transport.packet import TransportPacket
-from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 
 class Dispatcher:
@@ -99,9 +99,7 @@ class Dispatcher:
                 )
             except httpx.TransportError as exc:
                 self._registry.mark_unhealthy(target.node_name)
-                raise RuntimeError(
-                    f"dispatch transport error to {target.node_name!r}"
-                ) from exc
+                raise RuntimeError(f"dispatch transport error to {target.node_name!r}") from exc
             return TransportPacket.model_validate(response)
         finally:
             if incremented:

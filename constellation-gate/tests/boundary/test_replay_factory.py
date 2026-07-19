@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.boundary.replay_factory import ReplayFactory
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.boundary.replay_factory import ReplayFactory
 
 
 def test_replay_factory_builds_gate_reentry_packet_in_replay_mode() -> None:

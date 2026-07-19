@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import pytest
-
-from constellation_gate.boundary.ingress_validator import IngressValidationError, IngressValidator
-from constellation_gate.boundary.routing_policy import RoutingPolicyError, validate_gate_dispatch_policy
 from constellation_node_sdk.transport.packet import create_transport_packet
 from constellation_node_sdk.transport.provenance import RoutingProvenance
+
+from constellation_gate.boundary.ingress_validator import IngressValidationError, IngressValidator
+from constellation_gate.boundary.routing_policy import (
+    RoutingPolicyError,
+    validate_gate_dispatch_policy,
+)
 
 
 def test_architecture_rejects_direct_node_to_node_packet_at_gate_ingress() -> None:

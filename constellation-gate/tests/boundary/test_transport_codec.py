@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.boundary.transport_codec import decode_request_body, encode_response_body
 from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
+
+from constellation_gate.boundary.transport_codec import decode_request_body, encode_response_body
 
 
 def test_decode_request_body_round_trips_canonical_transport_packet() -> None:

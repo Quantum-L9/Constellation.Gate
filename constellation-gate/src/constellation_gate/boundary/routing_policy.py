@@ -49,13 +49,17 @@ def validate_gate_dispatch_policy(packet: TransportPacket, *, local_node: str) -
     normalized_local = local_node.strip().lower()
 
     if packet.provenance.origin_kind != "gate":
-        raise RoutingPolicyError("direct worker-targeted dispatch packets must have origin_kind='gate'")
+        raise RoutingPolicyError(
+            "direct worker-targeted dispatch packets must have origin_kind='gate'"
+        )
 
     if packet.address.source_node != normalized_local:
         raise RoutingPolicyError("Gate dispatch packet source_node must equal local Gate node")
 
     if packet.address.destination_node == normalized_local:
-        raise RoutingPolicyError("Gate dispatch packet destination_node must not point back to Gate")
+        raise RoutingPolicyError(
+            "Gate dispatch packet destination_node must not point back to Gate"
+        )
 
     if packet.provenance.resolved_by_gate is not True:
         raise RoutingPolicyError("Gate dispatch packet must set resolved_by_gate=true")

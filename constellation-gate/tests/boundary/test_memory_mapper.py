@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.boundary.memory_mapper import MemoryMapper
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.boundary.memory_mapper import MemoryMapper
 
 
 def test_memory_mapper_to_record_projects_transport_packet_fields() -> None:
