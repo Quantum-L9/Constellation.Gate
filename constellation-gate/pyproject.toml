@@ -27,10 +27,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "build>=1.2.2",
-  "mypy>=1.11.0",
+  # ruff and mypy are pinned to the exact versions referenced by
+  # .pre-commit-config.yaml so direct CI runs (`ruff check`, `mypy src`) and the
+  # pre-commit hooks resolve identical tool versions (no lint/type drift).
+  "mypy==2.3.0",
   "pytest>=8.3.0",
   "pytest-asyncio>=0.23.8",
-  "ruff>=0.6.0",
+  "ruff==0.15.22",
+  "types-PyYAML",
 ]
 
 [tool.setuptools]
