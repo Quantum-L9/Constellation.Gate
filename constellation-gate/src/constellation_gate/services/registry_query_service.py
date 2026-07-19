@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from constellation_gate.routing.node_registry import NodeRegistry
 
 
@@ -11,7 +13,7 @@ class RegistryQueryService:
     def __init__(self, registry: NodeRegistry) -> None:
         self._registry = registry
 
-    def snapshot(self) -> dict[str, dict]:
+    def snapshot(self) -> dict[str, dict[str, Any]]:
         registrations = self._registry.snapshot()
         return {
             node_name: registration.model_dump(mode="json")
