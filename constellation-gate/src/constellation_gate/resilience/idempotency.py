@@ -19,9 +19,7 @@ class IdempotencyStore:
         return key in self._store
 
 
-def enforce_idempotency(
-    packet: TransportPacket, store: IdempotencyStore
-) -> dict[str, Any] | None:
+def enforce_idempotency(packet: TransportPacket, store: IdempotencyStore) -> dict[str, Any] | None:
     key = packet.header.idempotency_key
     if not key:
         return None

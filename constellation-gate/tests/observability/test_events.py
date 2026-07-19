@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from constellation_node_sdk.transport.packet import create_transport_packet
+
 from constellation_gate.observability.events import (
     dispatch_event,
     failure_event,
     ingress_event,
     workflow_step_event,
 )
-from constellation_node_sdk.transport.packet import create_transport_packet
 
 
 def test_ingress_event_contains_event_name() -> None:

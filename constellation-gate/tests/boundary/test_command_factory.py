@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.boundary.command_factory import CommandFactory, ExecutionContext
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.boundary.command_factory import CommandFactory, ExecutionContext
 
 
 def test_command_factory_builds_execute_command() -> None:

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.resilience.dead_letter_queue import DeadLetterQueue
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.resilience.dead_letter_queue import DeadLetterQueue
 
 
 def test_dead_letter_queue_captures_failed_packet() -> None:

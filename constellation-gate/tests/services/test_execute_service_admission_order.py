@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import pytest
-
-from constellation_gate.services.execute_service import ExecuteService
 from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
+
+from constellation_gate.resilience.rate_limiter import RateLimitExceededError
+from constellation_gate.services.execute_service import ExecuteService
 
 
 class StaticValidator:
@@ -53,5 +54,5 @@ async def test_execute_service_checks_admission_before_dispatch() -> None:
     first = await service.execute({})
     assert first.payload["status"] == "completed"
 
-    with pytest.raises(Exception):
+    with pytest.raises(RateLimitExceededError):
         await service.execute({})

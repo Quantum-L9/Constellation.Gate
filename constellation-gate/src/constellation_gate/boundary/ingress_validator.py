@@ -25,7 +25,12 @@ class IngressValidator:
         local_node: str,
         known_nodes_provider: Callable[[], set[str]] | None = None,
         allowed_actions: tuple[str, ...] = (),
-        allowed_packet_types: tuple[str, ...] = ("request", "command", "delegation", "replay_request"),
+        allowed_packet_types: tuple[str, ...] = (
+            "request",
+            "command",
+            "delegation",
+            "replay_request",
+        ),
         allowed_clock_skew_seconds: int = 30,
         max_packet_bytes: int = 262_144,
         max_hop_depth: int = 64,

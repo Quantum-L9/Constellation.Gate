@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.boundary.response_factory import ResponseFactory
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.boundary.response_factory import ResponseFactory
 
 
 def test_response_factory_builds_response_packet() -> None:

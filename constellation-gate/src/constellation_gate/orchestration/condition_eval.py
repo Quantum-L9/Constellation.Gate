@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from typing import Any
 
-
 _ALLOWED_COMPARE_OPS = (
     ast.Eq,
     ast.NotEq,
@@ -111,9 +110,7 @@ class SafeConditionEvaluator:
             for key, value in zip(node.keys, node.values, strict=True):
                 if key is None:
                     raise ValueError("dict unpacking is not supported in conditions")
-                result_dict[self._eval(key, context=context)] = self._eval(
-                    value, context=context
-                )
+                result_dict[self._eval(key, context=context)] = self._eval(value, context=context)
             return result_dict
 
         raise ValueError(f"unsupported condition syntax: {type(node).__name__}")

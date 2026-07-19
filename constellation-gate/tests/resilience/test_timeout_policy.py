@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.resilience.timeout_policy import TimeoutPolicy
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.resilience.timeout_policy import TimeoutPolicy
 
 
 def test_timeout_policy_resolves_from_packet() -> None:

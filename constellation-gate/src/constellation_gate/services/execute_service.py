@@ -6,6 +6,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from constellation_node_sdk.transport.packet import TransportPacket
+
 from constellation_gate.observability.logging import log_packet_event
 from constellation_gate.observability.metrics import (
     decrement_in_flight,
@@ -24,7 +26,6 @@ from constellation_gate.resilience.rate_limiter import FixedWindowRateLimiter
 from constellation_gate.resilience.replay_guard import ReplayGuard
 from constellation_gate.resilience.retry_policy import RetryPolicy
 from constellation_gate.resilience.timeout_policy import TimeoutPolicy
-from constellation_node_sdk.transport.packet import TransportPacket
 
 logger = logging.getLogger("constellation_gate.execute")
 

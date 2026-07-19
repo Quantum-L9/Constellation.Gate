@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import logging
 
-from constellation_gate.observability.logging import JsonLogFormatter, packet_log_context
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.observability.logging import JsonLogFormatter, packet_log_context
 
 
 def test_packet_log_context_contains_lineage_and_route_fields() -> None:

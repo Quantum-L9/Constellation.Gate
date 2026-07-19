@@ -81,7 +81,12 @@ class GateSettings(BaseModel):
             raise ValueError("optional string fields must not be blank")
         return normalized
 
-    @field_validator("allowed_actions", "allowed_packet_types", "required_idempotency_actions", "attachment_allowed_schemes")
+    @field_validator(
+        "allowed_actions",
+        "allowed_packet_types",
+        "required_idempotency_actions",
+        "attachment_allowed_schemes",
+    )
     @classmethod
     def validate_tuples(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         normalized = tuple(item.strip().lower() for item in value if item.strip())
@@ -106,7 +111,11 @@ class GateSettings(BaseModel):
             return None
         if key_id in self.verifying_keys:
             return self.verifying_keys[key_id]
-        if self.signing_key_id is not None and key_id == self.signing_key_id and self.signing_key is not None:
+        if (
+            self.signing_key_id is not None
+            and key_id == self.signing_key_id
+            and self.signing_key is not None
+        ):
             return self.signing_key
         return None
 
@@ -125,7 +134,10 @@ def get_settings() -> GateSettings:
         signing_algorithm=os.getenv("L9_SIGNING_ALGORITHM"),
         verifying_keys={},
         allowed_actions=_env_tuple("L9_ALLOWED_ACTIONS"),
-        allowed_packet_types=_env_tuple("L9_ALLOWED_PACKET_TYPES", ("request", "command", "delegation", "replay_request")),
+        allowed_packet_types=_env_tuple(
+            "L9_ALLOWED_PACKET_TYPES",
+            ("request", "command", "delegation", "replay_request"),
+        ),
         required_idempotency_actions=_env_tuple("L9_REQUIRE_IDEMPOTENCY_FOR_ACTIONS"),
         allowed_clock_skew_seconds=int(os.getenv("L9_ALLOWED_CLOCK_SKEW_SECONDS", "30")),
         max_packet_bytes=int(os.getenv("L9_MAX_PACKET_BYTES", "262144")),

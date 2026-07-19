@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import pytest
-
-from constellation_gate.boundary.ingress_validator import IngressValidationError, IngressValidator
 from constellation_node_sdk.transport.packet import create_transport_packet
 from constellation_node_sdk.transport.provenance import RoutingProvenance
+
+from constellation_gate.boundary.ingress_validator import IngressValidationError, IngressValidator
 
 
 def test_ingress_validator_accepts_canonical_client_request_to_gate() -> None:

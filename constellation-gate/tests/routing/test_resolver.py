@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from constellation_node_sdk.transport.packet import create_transport_packet
+from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
 from constellation_gate.routing.resolver import RouteResolver
-from constellation_node_sdk.transport.packet import create_transport_packet
-from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 
 def _build_registry() -> NodeRegistry:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from constellation_gate.resilience.load_shedding import LoadShedError, LoadSheddingPolicy
+from constellation_gate.resilience.load_shedding import LoadSheddingPolicy, LoadShedError
 
 
 def test_load_shedding_allows_below_threshold() -> None:

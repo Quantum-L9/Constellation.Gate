@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
 from constellation_node_sdk.transport.packet import TransportPacket
+
+from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
 
 
 class RouteResolver:
@@ -48,6 +49,8 @@ class RouteResolver:
             raise LookupError("Gate-authored dispatch packets must set resolved_by_gate=true")
 
         if packet.address.source_node.strip().lower() != self._local_node:
-            raise LookupError("Gate-authored dispatch packet source_node must equal local Gate node")
+            raise LookupError(
+                "Gate-authored dispatch packet source_node must equal local Gate node"
+            )
 
         return self._registry.resolve_destination(destination)

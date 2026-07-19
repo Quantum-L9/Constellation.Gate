@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from constellation_node_sdk.transport.packet import TransportPacket
+from constellation_node_sdk.transport.provenance import RoutingProvenance
+
 from constellation_gate.orchestration.condition_eval import SafeConditionEvaluator
 from constellation_gate.orchestration.workflow_models import WorkflowDefinition, WorkflowStep
 from constellation_gate.routing.dispatch import Dispatcher
-from constellation_node_sdk.transport.packet import TransportPacket
-from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 
 class WorkflowEngine:
@@ -25,7 +26,9 @@ class WorkflowEngine:
         local_node: str = "gate",
         condition_evaluator: SafeConditionEvaluator | None = None,
     ) -> None:
-        self._definitions = {name.strip().lower(): definition for name, definition in definitions.items()}
+        self._definitions = {
+            name.strip().lower(): definition for name, definition in definitions.items()
+        }
         self._dispatcher = dispatcher
         self._local_node = local_node.strip().lower()
         self._condition_evaluator = condition_evaluator or SafeConditionEvaluator()
@@ -65,7 +68,11 @@ class WorkflowEngine:
                     resolved_by_gate=False,
                     original_source_node=packet.address.source_node,
                 ),
-                timeout_ms=step.timeout_ms if step.timeout_ms is not None else current_packet.header.timeout_ms,
+                timeout_ms=(
+                    step.timeout_ms
+                    if step.timeout_ms is not None
+                    else current_packet.header.timeout_ms
+                ),
             )
 
             step_response = await self._dispatcher.dispatch(step_packet)

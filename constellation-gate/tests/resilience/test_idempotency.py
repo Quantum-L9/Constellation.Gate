@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.resilience.idempotency import IdempotencyStore, enforce_idempotency
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.resilience.idempotency import IdempotencyStore, enforce_idempotency
 
 
 def test_idempotency_returns_cached_response() -> None:

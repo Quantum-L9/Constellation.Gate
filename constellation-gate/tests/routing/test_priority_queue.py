@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from constellation_gate.routing.priority_queue import PriorityPacketQueue
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.routing.priority_queue import PriorityPacketQueue
 
 
 def test_priority_queue_returns_lower_numeric_priority_first() -> None:
