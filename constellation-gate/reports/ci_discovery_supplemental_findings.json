@@ -1,75 +1,56 @@
 {
+  "remediation_status": {
+    "state": "remediated",
+    "description": "All findings from the original discovery report have been fixed on branch cursor/ci-remediation-676e. Re-running scripts/ci_discovery.py (with GATE_LOCAL_NODE set for the predeploy deploy-gate check) now reports checks_run=10, failed=0, blocking=0, total_findings=0.",
+    "verification_commands": [
+      "pip install -e \".[dev]\"  (constellation-node-sdk now resolves via the pinned git dependency)",
+      "ruff check src tests  -> clean",
+      "ruff format --check src tests  -> clean",
+      "mypy src  -> Success: no issues found in 63 source files",
+      "pytest -q  -> 141 passed",
+      "GATE_LOCAL_NODE=gate python scripts/ci_discovery.py --config ci_discovery.config.json  -> 0 blocking findings"
+    ]
+  },
   "pytest_deep_scan": {
-    "description": "One-off manual deeper scan performed during a discovery session. tests/conftest.py cannot be imported (see the pytest-collection check), which blocks 100% of automated test collection. To see what additional errors exist *underneath* that blocker, two local-only patches were applied temporarily (never committed) to satisfy the two missing symbols, and the suite was then run end-to-end with a per-test timeout guard.",
-    "temporary_patches_applied": [
+    "description": "During discovery, tests/conftest.py could not be imported, blocking 100% of collection; two local-only patches were applied temporarily to reveal 27 failing tests + 1 further collection error underneath. Those blockers and every downstream failure have since been fixed permanently (no temporary patches remain).",
+    "previously_blocking_import_bugs_now_fixed": [
       {
         "file": "src/constellation_gate/observability/metrics.py",
-        "issue": "constellation_gate.observability.__init__ imports 'observe_execution_latency' from this module, but the function was never defined here even though the EXECUTION_LATENCY_SECONDS Histogram it should record to already exists. docs/archive/gate-md-ingestion-export.md shows the original harvested source did define it; it was dropped when the module was published to src/, making every import of constellation_gate fail immediately.",
-        "missing_symbol": "observe_execution_latency",
-        "suggested_fix": "def observe_execution_latency(*, action: str, seconds: float) -> None:\n    EXECUTION_LATENCY_SECONDS.labels(action=action.strip().lower()).observe(seconds)"
+        "fix": "Added observe_execution_latency() recording to the EXECUTION_LATENCY_SECONDS histogram."
       },
       {
         "file": "src/constellation_gate/resilience/retry_policy.py",
-        "issue": "constellation_gate.resilience.__init__ imports 'RetryDecision' and expects RetryPolicy to expose max_attempts/delay_seconds/backoff_multiplier/retryable_exceptions/decision_for(); the committed file is a stale two-parameter stub (max_attempts, delay_seconds only, no RetryDecision dataclass, no decision_for/backoff support) that predates the real implementation. docs/archive/gate-md-ingestion-export.md contains the complete intended implementation.",
-        "missing_symbol": "RetryDecision",
-        "suggested_fix": "Replace the file contents with the RetryPolicy/RetryDecision implementation recorded at docs/archive/gate-md-ingestion-export.md (search for 'class RetryDecision')."
+        "fix": "Replaced the stale stub with the full RetryPolicy + RetryDecision implementation (decision_for/backoff/retryable_exceptions)."
+      },
+      {
+        "file": "src/constellation_gate/resilience/__init__.py",
+        "fix": "Exported CircuitBreaker, FixedWindowRateLimiter, LoadSheddingPolicy, BackpressurePolicy, DeadLetterQueue (and related types)."
       }
     ],
-    "result_after_patches": {
-      "command": "pytest -q --continue-on-collection-errors --timeout=20",
-      "passed": 113,
-      "failed": 27,
-      "errors": 1,
-      "duration_seconds": 20.44,
-      "additional_collection_error": {
-        "file": "tests/resilience/test_resilience_exports.py",
-        "note": "Fails to collect even after both patches above; likely references another export that still does not exist -- needs its own follow-up investigation once the two blocking issues are fixed."
-      },
-      "failed_test_ids": [
-        "tests/api/test_execute_endpoint.py::test_execute_endpoint_returns_canonical_packet_response",
-        "tests/api/test_execute_endpoint_errors.py::test_execute_endpoint_maps_timeout_to_504",
-        "tests/api/test_execute_endpoint_errors.py::test_execute_endpoint_maps_value_error_to_400",
-        "tests/api/test_full_app_surface.py::test_full_app_surface_exposes_expected_routes",
-        "tests/api/test_metrics_endpoint_in_app.py::test_metrics_endpoint_is_exposed_in_main_app",
-        "tests/architecture/test_lineage_reentry.py::test_lineage_is_preserved_across_gate_reentry_and_dispatch",
-        "tests/architecture/test_orchestrator_via_gate.py::test_orchestrator_follow_up_work_targets_gate_not_peer",
-        "tests/boundary/test_delegation_factory.py::test_delegation_factory_builds_gate_reentry_packet_for_follow_up_work",
-        "tests/boundary/test_delegation_factory.py::test_delegation_factory_inherits_parent_timeout_when_override_missing",
-        "tests/integration/test_end_to_end.py::test_end_to_end_node_to_gate_to_worker_response_path",
-        "tests/integration/test_ingress_hardening.py::test_execute_endpoint_rejects_invalid_request_shape",
-        "tests/integration/test_policy_runtime_response.py::test_execute_endpoint_maps_policy_runtime_failures",
-        "tests/integration/test_production_startup.py::test_app_lifespan_starts_runtime_and_health_surface",
-        "tests/resilience/test_circuit_breaker.py::test_circuit_breaker_half_open_then_closes_on_success",
-        "tests/resilience/test_circuit_breaker.py::test_circuit_breaker_half_open_reopens_on_failure",
-        "tests/resilience/test_idempotency.py::test_idempotency_returns_cached_response",
-        "tests/resilience/test_rate_limiter.py::test_rate_limiter_recovers_after_window_expires",
-        "tests/routing/test_dispatch.py::test_dispatch_creates_gate_authored_worker_dispatch_and_posts_to_worker",
-        "tests/routing/test_dispatch_node_concurrency.py::test_dispatch_enforces_per_node_concurrency_limit",
-        "tests/runtime/test_health_and_metrics_routes.py::test_health_and_metrics_routes_exist_and_are_operational",
-        "tests/services/test_execute_service_admission_control.py::test_execute_service_rate_limits_by_source_node",
-        "tests/services/test_execute_service_admission_control.py::test_execute_service_rejects_on_load_shedding_and_backpressure",
-        "tests/services/test_execute_service_admission_control.py::test_execute_service_respects_open_circuit_breaker",
-        "tests/services/test_execute_service_admission_order.py::test_execute_service_checks_admission_before_dispatch",
-        "tests/services/test_execute_service_dead_letter.py::test_execute_service_captures_terminal_failure_in_dead_letter_queue",
-        "tests/services/test_execute_service_idempotency.py::test_idempotency_returns_cached",
-        "tests/services/test_execute_service_pooled_client_path.py::test_dispatcher_uses_injected_pooled_client_path"
-      ],
-      "representative_root_causes": [
-        {
-          "example_test": "tests/services/test_execute_service_idempotency.py::test_idempotency_returns_cached",
-          "error": "TypeError: TransportPacket.derive() got an unexpected keyword argument 'idempotency_key'",
-          "note": "constellation-node-sdk's TransportPacket.derive() signature does not accept idempotency_key; Gate's test/production code assumes a newer/different SDK contract than the installed constellation-node-sdk 1.0.0 exposes (contract drift between Gate and its SDK dependency)."
-        },
-        {
-          "example_test": "tests/services/test_execute_service_pooled_client_path.py::test_dispatcher_uses_injected_pooled_client_path",
-          "error": "ValueError: hop.packet_id must match packet.header.packet_id",
-          "note": "Dispatcher.dispatch()'s hop-append call in src/constellation_gate/routing/dispatch.py builds a TransportHop keyed by the wrong packet id for this code path."
-        }
-      ]
+    "result_after_remediation": {
+      "command": "pytest -q",
+      "passed": 141,
+      "failed": 0,
+      "errors": 0,
+      "collection_errors": 0
     },
-    "caveat": "This sub-report was produced by hand during a discovery session (not by the checked-in ci_discovery.py tool, which stays strictly read-only) because getting past the conftest ImportError requires source modifications that a pure discovery tool must not silently apply. Re-run manually after the two blocking fixes above are applied to keep this section current."
+    "previously_failing_root_causes_now_fixed": [
+      {
+        "symptom": "TypeError: TransportPacket.derive() got an unexpected keyword argument 'idempotency_key'",
+        "fix": "The SDK's frozen derive() cannot override idempotency_key; DelegationFactory now re-finalizes the derived child's transport hash (via the SDK's public hashing) to carry a delegated key, and the two idempotency tests obtain their keyed packet via create_transport_packet(idempotency_key=...)."
+      },
+      {
+        "symptom": "ValueError: hop.packet_id must match packet.header.packet_id",
+        "fix": "Dispatcher.dispatch() now builds the dispatch hop from the derived packet (whose packet_id it must match) instead of the pre-derive packet."
+      },
+      {
+        "symptom": "ExecuteService missing admission-control / dead-letter attributes; API routes 404; error codes / status mapping wrong; circuit-breaker half-open and fixed-window rate-limiter bugs; per-node concurrency raised the wrong error.",
+        "fix": "Restored the ExecuteService admission-control + DLQ layer, fixed create_app wiring (dependency-module getters, lifespan runtime state, /metrics router), added admission->429 error mapping, corrected the fixed-window rate limiter and injectable-clock circuit breaker, made the per-node limiter authoritative, and relaxed the node-origin policy to require Gate re-entry rather than source registration."
+      }
+    ],
+    "caveat": "This section was refreshed after remediation. It no longer requires any temporary local patches; the discovery tool's automated checks alone now reflect a fully green state."
   },
   "dependency_resolution": {
-    "note": "constellation-node-sdk's real source lives in the separate Quantum-L9/Gate_SDK GitHub repo (package name constellation-node-sdk) but is not published to PyPI or any private index this repo is configured against. It was cloned and installed locally (pip install -e <clone>) purely to unblock local analysis; that workaround is not reproducible in a clean CI runner and is not checked into this repo."
+    "note": "constellation-node-sdk is now pinned as a PEP 508 VCS dependency (git+https://github.com/Quantum-L9/Gate_SDK.git@0d50f64) in both pyproject.toml and the pre-commit mypy hook's additional_dependencies, so clean CI runners and pre-commit hook environments resolve the canonical SDK reproducibly. No manual local clone/install is required."
   }
 }
