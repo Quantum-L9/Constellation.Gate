@@ -1,23 +1,45 @@
 {
   "$schema": "https://internal/schemas/ci-discovery-report-v1.json",
-  "generated_at": "2026-07-19T21:41:23.520314+00:00",
+  "generated_at": "2026-07-19T22:00:37.768510+00:00",
   "repo": "constellation-gate",
-  "git_commit": "25a3e56f2a707147a5887f165c856229f1826d4f",
+  "project_root": "/workspace/constellation-gate",
+  "git_commit": "f90aa9f30a1c10bc7d1878e9700f553f66b4d3a5",
   "git_branch": "cursor/ci-error-discovery-676e",
   "mode": "fail-open-discovery",
+  "detected_config": {
+    "lint_paths": [
+      "src",
+      "tests"
+    ],
+    "typecheck_paths": [
+      "src"
+    ],
+    "install_cmd": [
+      "/workspace/constellation-gate/.venv/bin/python",
+      "-m",
+      "pip",
+      "install",
+      "--dry-run",
+      "--ignore-installed",
+      "-e",
+      ".[dev]"
+    ],
+    "run_mypy": true,
+    "run_pytest": true,
+    "has_precommit_config": true
+  },
   "summary": {
     "checks_run": 10,
     "checks_failed": 9,
     "checks_passed": 1,
     "checks_skipped": 0,
-    "total_findings": 153,
+    "total_findings": 154,
     "blocking_findings": 3,
     "blocking_check_ids": [
       "dependency-install",
-      "pre-commit-mypy-hook-env",
+      "pre-commit-hook-env:mypy",
       "pytest-collection"
-    ],
-    "headline": "CI is currently fully broken end-to-end: the dependency-install step cannot resolve constellation-node-sdk, and even if that is bypassed locally, tests/conftest.py's import chain fails immediately so 0% of the pytest suite can collect. Both must be fixed before any lint/type/test signal from CI can be trusted."
+    ]
   },
   "checks": [
     {
@@ -29,7 +51,7 @@
       "severity": "critical",
       "blocking": true,
       "exit_code": 1,
-      "summary": "pip cannot resolve 'constellation-node-sdk>=1.0.0' from any configured index; it is not published to PyPI and this repo carries no private index / vendored copy, so a clean-room `pip install -e \".[dev]\"` (exactly what ci.yml's 'Install package with dev dependencies' step runs) fails before any lint/type/test step ever executes.",
+      "summary": "pip cannot resolve constellation-node-sdk>=1.0.0 from any configured index. Reproduced with --ignore-installed so an already-installed local/editable copy doesn't mask the failure. This is the exact command a clean CI runner's dependency-install step would run, so CI's install step will fail identically.",
       "error_count": 2,
       "errors": [
         {
@@ -41,14 +63,11 @@
           "message": "No matching distribution found for constellation-node-sdk>=1.0.0"
         }
       ],
-      "notes": [
-        "Reproduced with --ignore-installed so already-installed local copies (e.g. an editable install cloned from the Quantum-L9/Gate_SDK repo) do not mask the failure.",
-        "The real SDK source lives in the separate Quantum-L9/Gate_SDK GitHub repo (package name constellation-node-sdk) but is not published anywhere pip can reach it from."
-      ],
+      "notes": [],
       "raw_output_excerpt": "Obtaining file:///workspace/constellation-gate\n  Installing build dependencies: started\n  Installing build dependencies: finished with status 'done'\n  Checking if build backend supports build_editable: started\n  Checking if build backend supports build_editable: finished with status 'done'\n  Getting requirements to build editable: started\n  Getting requirements to build editable: finished with status 'done'\n  Preparing editable metadata (pyproject.toml): started\n  Preparing editable metadata (pyproject.toml): finished with status 'done'\nINFO: pip is looking at multiple versions of constellation-gate to determine which version is compatible with other requirements. This could take a while.\n\nERROR: Could not find a version that satisfies the requirement constellation-node-sdk>=1.0.0 (from constellation-gate) (from versions: none)\nERROR: No matching distribution found for constellation-node-sdk>=1.0.0"
     },
     {
-      "id": "pre-commit-mypy-hook-env",
+      "id": "pre-commit-hook-env:mypy",
       "tool": "pre-commit",
       "category": "environment",
       "command": "pre-commit run mypy --all-files -c /workspace/constellation-gate/.pre-commit-config.yaml",
@@ -56,17 +75,17 @@
       "severity": "critical",
       "blocking": true,
       "exit_code": 3,
-      "summary": "pre-commit's mypy hook environment cannot be built: same unresolvable constellation-node-sdk dependency as the CI install step. `pre-commit run` (and therefore `pre-commit run --all-files` / commit-time hooks) fails on environment setup before mypy ever runs.",
+      "summary": "pre-commit's 'mypy' hook environment cannot be built: an additional_dependencies entry cannot be resolved. `pre-commit run` fails on environment setup before this hook ever executes.",
       "error_count": 1,
       "errors": [
         {
           "tool": "pre-commit",
           "hook": "mypy",
-          "message": "additional_dependencies entry 'constellation-node-sdk>=1.0.0' cannot be resolved when pre-commit builds the mypy hook's isolated environment"
+          "message": "cannot resolve constellation-node-sdk>=1.0.0 when building this hook's isolated venv"
         }
       ],
       "notes": [
-        "Unlike ci.yml (which runs `mypy src` directly in an environment that already has constellation-node-sdk installed via the package's own install step), pre-commit's mypy mirror hook always provisions its own isolated venv from additional_dependencies, so it is independently broken even if step 1 above is fixed by vendoring/publishing the SDK."
+        "pre-commit provisions an isolated venv per hook from additional_dependencies, independent of however the main project environment installs its own dependencies."
       ],
       "raw_output_excerpt": "[INFO] Installing environment for https://github.com/pre-commit/mirrors-mypy.\n[INFO] Once installed this environment will be reused.\n[INFO] This may take a few minutes...\nAn unexpected error has occurred: CalledProcessError: command: ('/home/ubuntu/.cache/pre-commit/repo09aiyicn/py_env-python3.12/bin/python', '-mpip', 'install', '.', 'fastapi>=0.115.0', 'httpx>=0.27.0', 'pydantic>=2.8.0', 'pyyaml>=6.0.2', 'constellation-node-sdk>=1.0.0')\nreturn code: 1\nstdout:\n    Processing ./.\n      Installing build dependencies: started\n      Installing build dependencies: finished with status 'done'\n      Getting requirements to build wheel: started\n      Getting requirements to build wheel: finished with status 'done'\n      Preparing metadata (pyproject.toml): started\n      Preparing metadata (pyproject.toml): finished with status 'done'\n    Collecting fastapi>=0.115.0\n      Using cached fastapi-0.139.2-py3-none-any.whl.metadata (26 kB)\n    Collecting httpx>=0.27.0\n      Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)\n    Collecting pydantic>=2.8.0\n      Using cached pydantic-2.13.4-py3-none-any.whl.metadata (109 kB)\n    Collecting pyyaml>=6.0.2\n      Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)\nstderr:\n    ERROR: Could not find a version that satisfies the requirement constellation-node-sdk>=1.0.0 (from versions: none)\n    ERROR: No matching distribution found for constellation-node-sdk>=1.0.0\nCheck the log at /home/ubuntu/.cache/pre-commit/pre-commit.log"
     },
@@ -79,16 +98,24 @@
       "severity": "info",
       "blocking": false,
       "exit_code": 1,
-      "summary": "Autofix hooks (end-of-file-fixer, trailing-whitespace, ruff --fix, ruff-format) are enabled and convergent: first pass modified files ( 85 files changed, 289 insertions(+), 219 deletions(-)), second pass on the fixed tree only surfaces non-autofixable findings (0 remaining).",
-      "error_count": 0,
-      "errors": [],
-      "notes": [
-        "mypy hook skipped here (see pre-commit-mypy-hook-env check) since its environment cannot be provisioned at all.",
-        "check-yaml has no autofix mode; its failures are captured under pre-commit-non-autofixable-findings, not counted against convergence.",
-        "git diff --stat after first pass:  85 files changed, 289 insertions(+), 219 deletions(-)",
-        "Working tree changes made by this validation pass are reverted by this script (via `git stash`) unless --apply-fixes is supplied."
+      "summary": "Autofix-capable hooks converge: first pass modified files ( 85 files changed, 289 insertions(+), 219 deletions(-)), second pass on the fixed tree only surfaces non-autofixable findings (2 remaining).",
+      "error_count": 2,
+      "errors": [
+        {
+          "hook": "check-yaml",
+          "message": "expected a single document in the stream in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 3, column 1 but found another document in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 46, column 1"
+        },
+        {
+          "hook": "ruff",
+          "message": "\u001b[1mconstellation-gate/src/constellation_gate/services/execute_service.py\u001b[0m\u001b[36m:\u001b[0m62\u001b[36m:\u001b[0m13\u001b[36m:\u001b[0m \u001b[1;31mF841\u001b[0m Local variable `timeout` is assigned to but never used \u001b[1;38;5;12m   |\u001b[0m \u001b[1;38;5;12m60 |\u001b[0m             self.replay_guard.check_and_record(str(packet.header.packet_id)) \u001b[1;38;5;12m61 |\u001b[0m \u001b[1;38;5;12m62 |\u001b[0m             timeout = self.timeout_policy.resolve(packet) \u001b[1;38;5;12m   |\u001b[0m\u001b[1;38;5;9m             ^^^^^^^\u001b[0m \u001b[1;38;5;9mF841\u001b[0m \u001b[1;38;5;12m63 |\u001b[0m \u001b"
+        }
       ],
-      "raw_output_excerpt": "check for merge conflicts................................................Passed\ncheck yaml...............................................................Failed\n- hook id: check-yaml\n- exit code: 1\n\nexpected a single document in the stream\n  in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 3, column 1\nbut found another document\n  in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 46, column 1\n\ncheck json...............................................................Passed\nfix end of files.........................................................Failed\n- hook id: end-of-file-fixer\n- exit code: 1\n- files were modified by this hook\n\nFixing constellation-gate/docs/reference/gate-sdk/new files.Intentionally minimal in the reference layer.md\nFixing constellation-gate/contracts/ADMIN_REGISTER_SPEC.md\nFixing constellation-gate/docs/migration-from-legacy-gate.md\nFixing constellation-gate/docs/reference/gate-sdk/SDK.Phase.2.md\nFixing constellation-gate/docs/target-filetree.md\nFixing constellation-gate/docs/workflow-engine.md\nFixing constellation-gate/.pre-commit-config.yaml\nFixing constellation-gate/docs/reference/gate-sdk/SDK Packaging Guide.md\nFixing constellation-gate/docs/reference/gate-sdk/Constellation.Gate.Node \u2014 Full Repository Ingestion.md\nFixing constellation-gate/docs/archive/gate-md-ingestion-export.md\nFixing constellation-gate/docs/dispatch-semantics.md\nFixing constellation-gate/current_work/setup-new-workspace.yaml\nFixing constellation-gate/docs/gate-kernel.md\nFixing constellation-gate/docs/ingress-policy.md\nFixing constellation-gate/docs/action-resolution.md\nFixing constellation-gate/docs/reference/gate-sdk/SDK.Phase.1.md\nFixing constellation-gate/docs/transport-rename-cheatsheet.md\nFixing constellation-gate/contracts/WORKFLOW_SPEC.md\nFixing constellation-gate/deploy/README_DEPLOY.md\n\ntrim trailing whitespace.................................................Failed\n- hook id: trailing-whitespace\n- exit code: 1\n- files were modified by this hook\n\nFixing constellation-gate/docs/reference/gate-sdk/SDK.Phase.2.md\nFixing constellation-gate/docs/archive/gate-md-ingestion-export.md\nFixing constellation-gate/current_work/setup-new-workspace.yaml\nFixing constellation-gate/docs/gate-kernel.md\nFixing constellation-gate/docs/reference/gate-sdk/SDK.Phase.1.md\n\nmixed line ending........................................................Passed\ncheck for added large files..............................................Passed\nruff.....................................................................Failed\n- hook id: ruff\n- exit code: 1\n- files were modified by this hook\n\n\u001b[1mconstellation-gate/src/constellation_gate/boundary/ingress_validator.py\u001b[0m\u001b[36m:\u001b[0m28\u001b[36m:\u001b[0m101\u001b[36m:\u001b[0m \u001b[1;31mE501\u001b[0m Line too long (103 > 100)\n\u001b[1;38;5;12m   |\u001b[0m\n\u001b[1;38;5;12m26 |\u001b[0m         known_nodes_provider: Callable[[], set[str]] | None = None,\n\u001b[1;38;5;12m27 |\u001b[0m         allowed_actions: tuple[str, ...] = (),\n\u001b[1;38;5;12m28 |\u001b[0m         allowed_packet_types: tuple[str, ...] = (\"request\", \"command\", \"delegation\", \"replay_request\"),\n\u001b[1;38;5;12m   |\u001b[0m\u001b[1;38;5;9m                                                                                                     ^^^\u001b[0m \u001b[1;38;5;9mE501\u001b[0m\n\u001b[1;38;5;12m29 |\u001b[0m         allowed_clock_skew_seconds: int = 30,\n\u001b[1;38;5;12m30 |\u001b[0m         max_packet_bytes: int = 262_144,\n\u001b[1;38;5;12m   |\u001b[0m\n\n\u001b[1mconstellation-gate/src/constellation_gate/boundary/memory_mapper.py\u001b[0m\u001b[36m:\u001b[0m25\u001b[36m:\u001b[0m101\u001b[36m:\u001b[0m \u001b[1;31mE501\u001b[0m Line too long (101 > 100)\n\u001b[1;38;5;12m   |\u001b[0m\n\u001b[1;38;5;12m23 |\u001b[0m             \"tenant_org_id\": packet.tenant.org_id,\n\u001b[1;38;5;12m24 |\u001b[0m             \"root_id\": str(packet.lineage.root_id),\n\u001b[1;38;5;12m25 |\u001b[0m             \"parent_id\": None if packet.lineage.parent_id is None else str(packet.lineage.parent_id),\n\u001b[1;38;5;12m   |\u001b[0m\u001b[1;38;5;9m                                                                                                     ^\u001b[0m \u001b[1;38;5;9mE501\u001b[\n... [truncated 15511 chars]"
+      "notes": [
+        "Hooks skipped here (isolated env can't be validated by a text diff): mypy",
+        "git diff --stat after first pass:  85 files changed, 289 insertions(+), 219 deletions(-)",
+        "Working tree changes made by this validation pass are reverted via `git stash` unless --apply-fixes is supplied."
+      ],
+      "raw_output_excerpt": "check for merge conflicts................................................Passed\ncheck yaml...............................................................Failed\n- hook id: check-yaml\n- exit code: 1\n\nexpected a single document in the stream\n  in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 3, column 1\nbut found another document\n  in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 46, column 1\n\ncheck json...............................................................Passed\nfix end of files.........................................................Failed\n- hook id: end-of-file-fixer\n- exit code: 1\n- files were modified by this hook\n\nFixing constellation-gate/contracts/ADMIN_REGISTER_SPEC.md\nFixing constellation-gate/docs/migration-from-legacy-gate.md\nFixing constellation-gate/docs/reference/gate-sdk/new files.Intentionally minimal in the reference layer.md\nFixing constellation-gate/docs/target-filetree.md\nFixing constellation-gate/docs/reference/gate-sdk/SDK.Phase.2.md\nFixing constellation-gate/docs/workflow-engine.md\nFixing constellation-gate/.pre-commit-config.yaml\nFixing constellation-gate/docs/reference/gate-sdk/SDK Packaging Guide.md\nFixing constellation-gate/docs/reference/gate-sdk/Constellation.Gate.Node \u2014 Full Repository Ingestion.md\nFixing constellation-gate/docs/archive/gate-md-ingestion-export.md\nFixing constellation-gate/docs/dispatch-semantics.md\nFixing constellation-gate/current_work/setup-new-workspace.yaml\nFixing constellation-gate/docs/gate-kernel.md\nFixing constellation-gate/docs/ingress-policy.md\nFixing constellation-gate/docs/action-resolution.md\nFixing constellation-gate/docs/reference/gate-sdk/SDK.Phase.1.md\nFixing constellation-gate/docs/transport-rename-cheatsheet.md\nFixing constellation-gate/contracts/WORKFLOW_SPEC.md\nFixing constellation-gate/deploy/README_DEPLOY.md\n\ntrim trailing whitespace.................................................Failed\n- hook id: trailing-whitespace\n- exit code: 1\n- files were modified by this hook\n\nFixing constellation-gate/docs/reference/gate-sdk/SDK.Phase.2.md\nFixing constellation-gate/docs/archive/gate-md-ingestion-export.md\nFixing constellation-gate/current_work/setup-new-workspace.yaml\nFixing constellation-gate/docs/gate-kernel.md\nFixing constellation-gate/docs/reference/gate-sdk/SDK.Phase.1.md\n\nmixed line ending........................................................Passed\ncheck for added large files..............................................Passed\nruff.....................................................................Failed\n- hook id: ruff\n- exit code: 1\n- files were modified by this hook\n\n\u001b[1mconstellation-gate/src/constellation_gate/boundary/ingress_validator.py\u001b[0m\u001b[36m:\u001b[0m28\u001b[36m:\u001b[0m101\u001b[36m:\u001b[0m \u001b[1;31mE501\u001b[0m Line too long (103 > 100)\n\u001b[1;38;5;12m   |\u001b[0m\n\u001b[1;38;5;12m26 |\u001b[0m         known_nodes_provider: Callable[[], set[str]] | None = None,\n\u001b[1;38;5;12m27 |\u001b[0m         allowed_actions: tuple[str, ...] = (),\n\u001b[1;38;5;12m28 |\u001b[0m         allowed_packet_types: tuple[str, ...] = (\"request\", \"command\", \"delegation\", \"replay_request\"),\n\u001b[1;38;5;12m   |\u001b[0m\u001b[1;38;5;9m                                                                                                     ^^^\u001b[0m \u001b[1;38;5;9mE501\u001b[0m\n\u001b[1;38;5;12m29 |\u001b[0m         allowed_clock_skew_seconds: int = 30,\n\u001b[1;38;5;12m30 |\u001b[0m         max_packet_bytes: int = 262_144,\n\u001b[1;38;5;12m   |\u001b[0m\n\n\u001b[1mconstellation-gate/src/constellation_gate/boundary/memory_mapper.py\u001b[0m\u001b[36m:\u001b[0m25\u001b[36m:\u001b[0m101\u001b[36m:\u001b[0m \u001b[1;31mE501\u001b[0m Line too long (101 > 100)\n\u001b[1;38;5;12m   |\u001b[0m\n\u001b[1;38;5;12m23 |\u001b[0m             \"tenant_org_id\": packet.tenant.org_id,\n\u001b[1;38;5;12m24 |\u001b[0m             \"root_id\": str(packet.lineage.root_id),\n\u001b[1;38;5;12m25 |\u001b[0m             \"parent_id\": None if packet.lineage.parent_id is None else str(packet.lineage.parent_id),\n\u001b[1;38;5;12m   |\u001b[0m\u001b[1;38;5;9m                                                                                                     ^\u001b[0m \u001b[1;38;5;9mE501\u001b[\n... [truncated 15511 chars]"
     },
     {
       "id": "pre-commit-non-autofixable-findings",
@@ -99,22 +126,16 @@
       "severity": "low",
       "blocking": false,
       "exit_code": 1,
-      "summary": "2 validator-only pre-commit hook finding(s) with no autofix available.",
-      "error_count": 2,
+      "summary": "1 validator-only pre-commit hook finding(s) with no autofix available.",
+      "error_count": 1,
       "errors": [
         {
           "hook": "check-yaml",
-          "message": "in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 3, column 1"
-        },
-        {
-          "hook": "check-yaml",
-          "message": "in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 46, column 1"
+          "message": "expected a single document in the stream in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 3, column 1 but found another document in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 46, column 1"
         }
       ],
-      "notes": [
-        "check-yaml rejects multi-document YAML streams by default (current_work/setup-new-workspace.yaml embeds two `---`-separated documents); this only breaks local pre-commit usage, not the ci.yml GitHub Actions job, which never invokes pre-commit."
-      ],
-      "raw_output_excerpt": "check for merge conflicts................................................Passed\ncheck yaml...............................................................Failed\n- hook id: check-yaml\n- exit code: 1\n\nexpected a single document in the stream\n  in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 3, column 1\nbut found another document\n  in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 46, column 1\n\ncheck json...............................................................Passed\nfix end of files........................................................Skipped\ntrim trailing whitespace................................................Skipped\nmixed line ending........................................................Passed\ncheck for added large files..............................................Passed\nruff....................................................................Skipped\nruff-format.............................................................Skipped\nmypy....................................................................Skipped"
+      "notes": [],
+      "raw_output_excerpt": "check for merge conflicts................................................Passed\ncheck yaml...............................................................Failed\n- hook id: check-yaml\n- exit code: 1\n\nexpected a single document in the stream\n  in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 3, column 1\nbut found another document\n  in \"constellation-gate/current_work/setup-new-workspace.yaml\", line 46, column 1\n\ncheck json...............................................................Passed\nfix end of files........................................................Skipped\ntrim trailing whitespace................................................Skipped\nmixed line ending.......................................................Skipped\ncheck for added large files..............................................Passed\nruff....................................................................Skipped\nruff-format.............................................................Skipped\nmypy....................................................................Skipped"
     },
     {
       "id": "ruff-check",
@@ -125,7 +146,7 @@
       "severity": "medium",
       "blocking": false,
       "exit_code": 1,
-      "summary": "90 ruff lint violation(s) across src/ and tests/ (60 auto-fixable with `ruff check --fix`).",
+      "summary": "90 ruff lint violation(s) across src, tests (60 auto-fixable with `ruff check --fix`).",
       "error_count": 90,
       "errors": [
         {
@@ -939,9 +960,7 @@
           "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
         }
       ],
-      "notes": [
-        "Run mirrors the ci.yml 'Ruff' step: `ruff check src tests`."
-      ],
+      "notes": [],
       "raw_output_excerpt": "[\n  {\n    \"cell\": null,\n    \"code\": \"I001\",\n    \"end_location\": {\n      \"column\": 73,\n      \"row\": 8\n    },\n    \"filename\": \"/workspace/constellation-gate/src/constellation_gate/boundary/__init__.py\",\n    \"fix\": {\n      \"applicability\": \"safe\",\n      \"edits\": [\n        {\n          \"content\": \"from __future__ import annotations\\n\\nfrom constellation_gate.boundary.command_factory import (\\n    CommandFactory,\\n    ExecuteCommand,\\n    ExecutionContext,\\n)\\nfrom constellation_gate.boundary.delegation_factory import DelegationFactory\\nfrom constellation_gate.boundary.failure_factory import FailureFactory\\nfrom constellation_gate.boundary.memory_mapper import MemoryMapper\\nfrom constellation_gate.boundary.replay_factory import ReplayFactory\\nfrom constellation_gate.boundary.response_factory import ResponseFactory\\n\\n\",\n          \"end_location\": {\n            \"column\": 1,\n            \"row\": 10\n          },\n          \"location\": {\n            \"column\": 1,\n            \"row\": 1\n          }\n        }\n      ],\n      \"message\": \"Organize imports\"\n    },\n    \"location\": {\n      \"column\": 1,\n      \"row\": 1\n    },\n    \"message\": \"Import block is un-sorted or un-formatted\",\n    \"name\": \"unsorted-imports\",\n    \"noqa_row\": 1,\n    \"severity\": \"error\",\n    \"url\": \"https://docs.astral.sh/ruff/rules/unsorted-imports\"\n  },\n  {\n    \"cell\": null,\n    \"code\": \"E501\",\n    \"end_location\": {\n      \"column\": 105,\n      \"row\": 3\n    },\n    \"filename\": \"/workspace/constellation-gate/src/constellation_gate/boundary/__init__.py\",\n    \"fix\": null,\n    \"location\": {\n      \"column\": 101,\n      \"row\": 3\n    },\n    \"message\": \"Line too long (104 > 100)\",\n    \"name\": \"line-too-long\",\n    \"noqa_row\": 3,\n    \"severity\": \"error\",\n    \"url\": \"https://docs.astral.sh/ruff/rules/line-too-long\"\n  },\n  {\n    \"cell\": null,\n    \"code\": \"E501\",\n    \"end_location\": {\n      \"column\": 104,\n      \"row\": 28\n    },\n    \"filename\": \"/workspace/constellation-gate/src/constellation_gate/boundary/ingress_validator.py\",\n    \"fix\": null,\n    \"location\": {\n      \"column\": 101,\n      \"row\": 28\n    },\n    \"message\": \"Line too long (103 > 100)\",\n    \"name\": \"line-too-long\",\n    \"noqa_row\": 28,\n    \"severity\": \"error\",\n    \"url\": \"https://docs.astral.sh/ruff/rules/line-too-long\"\n  },\n  {\n    \"cell\": null,\n    \"code\": \"E501\",\n    \"end_location\": {\n      \"column\": 102,\n      \"row\": 25\n    },\n    \"filename\": \"/workspace/constellation-gate/src/constellation_gate/boundary/memory_mapper.py\",\n    \"fix\": null,\n    \"location\": {\n      \"column\": 101,\n      \"row\": 25\n    },\n    \"message\": \"Line too long (101 > 100)\",\n    \"name\": \"line-too-long\",\n    \"noqa_row\": 25,\n    \"severity\": \"error\",\n    \"url\": \"https://docs.astral.sh/ruff/rules/line-too-long\"\n  },\n  {\n    \"cell\": null,\n    \"code\": \"E501\",\n    \"end_location\": {\n      \"column\": 109,\n      \"row\": 10\n    },\n    \"filename\": \"/workspace/constellation-gate/src/constellation_gate/boundary/routing_policy.py\",\n    \"fix\": null,\n    \"location\": {\n      \"column\": 101,\n      \"row\": 10\n    },\n    \"message\": \"Line too long (108 > 100)\",\n    \"name\": \"line-too-long\",\n    \"noqa_row\": 10,\n    \"severity\": \"error\",\n    \"url\": \"https://docs.astral.sh/ruff/rules/line-too-long\"\n  },\n  {\n    \"cell\": null,\n    \"code\": \"E501\",\n    \"end_location\": {\n      \"column\": 107,\n      \"row\": 27\n    },\n    \"filename\": \"/workspace/constellation-gate/src/constellation_gate/boundary/routing_policy.py\",\n    \"fix\": null,\n    \"location\": {\n      \"column\": 101,\n      \"row\": 27\n    },\n    \"message\": \"Line too long (106 > 100)\",\n    \"name\": \"line-too-long\",\n    \"noqa_row\": 27,\n    \"severity\": \"error\",\n    \"url\": \"https://docs.astral.sh/ruff/rules/line-too-long\"\n  },\n  {\n    \"cell\": null,\n    \"code\": \"E501\",\n    \"end_location\": {\n      \"column\": 105,\n      \"row\": 37\n    },\n    \"filename\": \"/workspace/constellation-gate/src/constellation_gate/boundary/routing_policy.py\",\n    \"fix\": null,\n    \"location\": {\n      \"column\": 101,\n      \"row\": 37\n    },\n    \"message\": \"Line too long (104 > 100)\",\n    \"\n... [truncated 73677 chars]"
     },
     {
@@ -1033,9 +1052,7 @@
           "message": "would be reformatted by `ruff format`"
         }
       ],
-      "notes": [
-        "ci.yml does not currently run a formatting check step; only .pre-commit-config.yaml's ruff-format hook enforces this, so formatting drift is only caught locally by contributors who run pre-commit."
-      ],
+      "notes": [],
       "raw_output_excerpt": "Would reformat: \u001b[1msrc/constellation_gate/boundary/__init__.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/boundary/ingress_validator.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/boundary/memory_mapper.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/boundary/routing_policy.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/config/settings.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/observability/logging.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/orchestration/workflow_engine.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/orchestration/workflow_models.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/routing/node_registry.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/routing/priority_queue.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/routing/resolver.py\u001b[0m\nWould reformat: \u001b[1msrc/constellation_gate/schemas/workflow.py\u001b[0m\nWould reformat: \u001b[1mtests/architecture/test_gate_dispatch_authority.py\u001b[0m\nWould reformat: \u001b[1mtests/architecture/test_gate_only_routing.py\u001b[0m\nWould reformat: \u001b[1mtests/observability/test_metrics.py\u001b[0m\nWould reformat: \u001b[1mtests/resilience/test_admission_controller.py\u001b[0m\nWould reformat: \u001b[1mtests/resilience/test_resilience_exports.py\u001b[0m\nWould reformat: \u001b[1mtests/routing/test_dispatch_node_concurrency.py\u001b[0m\nWould reformat: \u001b[1mtests/schemas/test_workflow_schema.py\u001b[0m\n19 files would be reformatted, 126 files already formatted"
     },
     {
@@ -1047,7 +1064,7 @@
       "severity": "high",
       "blocking": false,
       "exit_code": 1,
-      "summary": "33 mypy error(s) under strict mode across src/.",
+      "summary": "33 mypy error(s) across src.",
       "error_count": 33,
       "errors": [
         {
@@ -1315,10 +1332,7 @@
           "hint": null
         }
       ],
-      "notes": [
-        "Run mirrors the ci.yml 'Mypy' step: `mypy src`.",
-        "pyproject.toml pins mypy>=1.11.0 with no upper bound, so this environment resolved a materially newer mypy release than the pre-commit/mirrors-mypy rev pinned in .pre-commit-config.yaml; see the version-drift finding for details."
-      ],
+      "notes": [],
       "raw_output_excerpt": "{\"file\": \"src/constellation_gate/resilience/timeout_policy.py\", \"line\": 8, \"column\": 4, \"end_line\": 9, \"end_column\": 77, \"message\": \"Function is missing a type annotation for one or more parameters\", \"hint\": null, \"code\": \"no-untyped-def\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/resilience/idempotency.py\", \"line\": 8, \"column\": 31, \"end_line\": 8, \"end_column\": 32, \"message\": \"Missing type arguments for generic type \\\"dict\\\"\", \"hint\": null, \"code\": \"type-arg\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/resilience/idempotency.py\", \"line\": 10, \"column\": 40, \"end_line\": 10, \"end_column\": 41, \"message\": \"Missing type arguments for generic type \\\"dict\\\"\", \"hint\": null, \"code\": \"type-arg\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/resilience/idempotency.py\", \"line\": 13, \"column\": 35, \"end_line\": 13, \"end_column\": 36, \"message\": \"Missing type arguments for generic type \\\"dict\\\"\", \"hint\": null, \"code\": \"type-arg\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/resilience/idempotency.py\", \"line\": 20, \"column\": 0, \"end_line\": 26, \"end_column\": 15, \"message\": \"Function is missing a type annotation for one or more parameters\", \"hint\": null, \"code\": \"no-untyped-def\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/resilience/idempotency.py\", \"line\": 20, \"column\": 69, \"end_line\": 20, \"end_column\": 70, \"message\": \"Missing type arguments for generic type \\\"dict\\\"\", \"hint\": null, \"code\": \"type-arg\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/resilience/circuit_breaker.py\", \"line\": 86, \"column\": 4, \"end_line\": 94, \"end_column\": 21, \"message\": \"Function is missing a type annotation\", \"hint\": null, \"code\": \"no-untyped-def\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/orchestration/condition_eval.py\", \"line\": 111, \"column\": 27, \"end_line\": 111, \"end_column\": 30, \"message\": \"Argument 1 to \\\"_eval\\\" of \\\"SafeConditionEvaluator\\\" has incompatible type \\\"expr | None\\\"; expected \\\"AST\\\"\", \"hint\": null, \"code\": \"arg-type\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/orchestration/condition_eval.py\", \"line\": 120, \"column\": 12, \"end_line\": 120, \"end_column\": 32, \"message\": \"Returning Any from function declared to return \\\"bool\\\"\", \"hint\": null, \"code\": \"no-any-return\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/orchestration/condition_eval.py\", \"line\": 122, \"column\": 12, \"end_line\": 122, \"end_column\": 32, \"message\": \"Returning Any from function declared to return \\\"bool\\\"\", \"hint\": null, \"code\": \"no-any-return\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/orchestration/condition_eval.py\", \"line\": 124, \"column\": 12, \"end_line\": 124, \"end_column\": 31, \"message\": \"Returning Any from function declared to return \\\"bool\\\"\", \"hint\": null, \"code\": \"no-any-return\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/orchestration/condition_eval.py\", \"line\": 126, \"column\": 12, \"end_line\": 126, \"end_column\": 32, \"message\": \"Returning Any from function declared to return \\\"bool\\\"\", \"hint\": null, \"code\": \"no-any-return\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/orchestration/condition_eval.py\", \"line\": 128, \"column\": 12, \"end_line\": 128, \"end_column\": 31, \"message\": \"Returning Any from function declared to return \\\"bool\\\"\", \"hint\": null, \"code\": \"no-any-return\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/orchestration/condition_eval.py\", \"line\": 130, \"column\": 12, \"end_line\": 130, \"end_column\": 32, \"message\": \"Returning Any from function declared to return \\\"bool\\\"\", \"hint\": null, \"code\": \"no-any-return\", \"severity\": \"error\"}\n{\"file\": \"src/constellation_gate/routing/node_registry.py\", \"line\": 6, \"column\": 0, \"end_line\": 6, \"end_column\": 1, \"message\": \"Library stubs not installed for \\\"yaml\\\"\", \"hint\": \"Hint: \\\"python3 -m pip install types-PyYAML\\\"\\n(or run \\\"mypy --install-types\\\" to install all missing stub packages)\\nSee https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports\", \"code\": \"import-untyped\", \"severity\": \"error\"}\n{\"\n... [truncated 4616 chars]"
     },
     {
@@ -1330,11 +1344,11 @@
       "severity": "critical",
       "blocking": true,
       "exit_code": 4,
-      "summary": "tests/conftest.py fails to import, which blocks collection of every test under tests/ -- 0% of the suite can run. This is the same failure ci.yml's 'Pytest' step (`pytest -q`) would hit.",
+      "summary": "Collection fails while importing /workspace/constellation-gate/tests/conftest.py, which can block collection of dependent tests -- the same failure a CI `pytest` step would hit.",
       "error_count": 1,
       "errors": [
         {
-          "file": "tests/conftest.py",
+          "file": "/workspace/constellation-gate/tests/conftest.py",
           "message": "ImportError: cannot import name 'observe_execution_latency' from 'constellation_gate.observability.metrics' (/workspace/constellation-gate/src/constellation_gate/observability/metrics.py)",
           "import_chain": [
             "tests/conftest.py:5: in <module>",
@@ -1353,20 +1367,48 @@
         }
       ],
       "notes": [
-        "See supplemental_manual_findings.pytest_deep_scan in the full report for a one-off deeper run performed with temporary (uncommitted) local patches that unblock this import chain, revealing the test failures underneath."
+        "This deliberately runs --collect-only and never executes tests: getting past a collection-time ImportError requires source changes, which is out of scope for a read-only discovery tool. Use --supplemental-findings to attach a manually produced deeper scan once such a blocker is fixed or worked around locally."
       ],
       "raw_output_excerpt": "ImportError while loading conftest '/workspace/constellation-gate/tests/conftest.py'.\ntests/conftest.py:5: in <module>\n    from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry\nsrc/constellation_gate/__init__.py:3: in <module>\n    from constellation_gate.api.main import app, create_app\nsrc/constellation_gate/api/__init__.py:3: in <module>\n    from constellation_gate.api.dependencies import (\nsrc/constellation_gate/api/dependencies.py:7: in <module>\n    from constellation_gate.orchestration.workflow_engine import WorkflowEngine\nsrc/constellation_gate/orchestration/__init__.py:4: in <module>\n    from constellation_gate.orchestration.workflow_engine import WorkflowEngine\nsrc/constellation_gate/orchestration/workflow_engine.py:7: in <module>\n    from constellation_gate.routing.dispatch import Dispatcher\nsrc/constellation_gate/routing/__init__.py:3: in <module>\n    from constellation_gate.routing.dispatch import Dispatcher\nsrc/constellation_gate/routing/dispatch.py:8: in <module>\n    from constellation_gate.runtime.node_limits import PerNodeLimiterManager\nsrc/constellation_gate/runtime/__init__.py:6: in <module>\n    from constellation_gate.runtime.metrics_endpoint import router as metrics_router\nsrc/constellation_gate/runtime/metrics_endpoint.py:6: in <module>\n    from constellation_gate.observability.metrics import REGISTRY\nsrc/constellation_gate/observability/__init__.py:11: in <module>\n    from constellation_gate.observability.metrics import (\nE   ImportError: cannot import name 'observe_execution_latency' from 'constellation_gate.observability.metrics' (/workspace/constellation-gate/src/constellation_gate/observability/metrics.py)"
     },
     {
-      "id": "predeploy-check-script",
-      "tool": "python",
+      "id": "tooling-version-drift",
+      "tool": "meta",
+      "category": "environment",
+      "command": "static comparison of .pre-commit-config.yaml pins vs resolved CLI versions",
+      "status": "fail",
+      "severity": "medium",
+      "blocking": false,
+      "exit_code": 0,
+      "summary": "2 tool(s) have version drift between their pre-commit pin and the version resolved in this environment.",
+      "error_count": 2,
+      "errors": [
+        {
+          "tool": "ruff",
+          "pre_commit_pinned_rev": "0.6.9",
+          "resolved_version": "0.15.22",
+          "message": "pre-commit pins ruff==0.6.9 but the version resolved in this environment is 0.15.22; local/CI runs invoking `ruff` directly and the pinned pre-commit hook can disagree."
+        },
+        {
+          "tool": "mypy",
+          "pre_commit_pinned_rev": "1.11.2",
+          "resolved_version": "2.3.0",
+          "message": "pre-commit pins mypy==1.11.2 but the version resolved in this environment is 2.3.0; local/CI runs invoking `mypy` directly and the pinned pre-commit hook can disagree."
+        }
+      ],
+      "notes": [],
+      "raw_output_excerpt": null
+    },
+    {
+      "id": "extra:predeploy-check-script",
+      "tool": "custom",
       "category": "deploy-script",
-      "command": "/workspace/constellation-gate/.venv/bin/python /workspace/constellation-gate/scripts/predeploy_check.py",
+      "command": "python scripts/predeploy_check.py",
       "status": "fail",
       "severity": "high",
       "blocking": false,
       "exit_code": 1,
-      "summary": "3 predeploy_check.py failure(s); this same script runs inside scripts/entrypoint.sh before the container's uvicorn process starts, so it will fail container startup under the same conditions.",
+      "summary": "scripts/predeploy_check.py runs inside scripts/entrypoint.sh before the container's uvicorn process starts, so a failure here fails container startup under the same conditions -- FAILED",
       "error_count": 3,
       "errors": [
         {
@@ -1379,43 +1421,13 @@
           "message": "failed to import constellation_gate.services.execute_service: cannot import name 'observe_execution_latency' from 'constellation_gate.observability.metrics' (/workspace/constellation-gate/src/constellation_gate/observability/metrics.py)"
         }
       ],
-      "notes": [
-        "Requires GATE_LOCAL_NODE to be set; also transitively imports the whole constellation_gate.api.main module graph, so it inherits the same collection-time ImportError chain documented in pytest-collection."
-      ],
-      "raw_output_excerpt": "ERROR: missing env var: GATE_LOCAL_NODE\nERROR: failed to import constellation_gate.api.main: cannot import name 'observe_execution_latency' from 'constellation_gate.observability.metrics' (/workspace/constellation-gate/src/constellation_gate/observability/metrics.py)\nERROR: failed to import constellation_gate.services.execute_service: cannot import name 'observe_execution_latency' from 'constellation_gate.observability.metrics' (/workspace/constellation-gate/src/constellation_gate/observability/metrics.py)"
-    },
-    {
-      "id": "tooling-version-drift",
-      "tool": "meta",
-      "category": "environment",
-      "command": "static comparison of .pre-commit-config.yaml revs vs resolved versions",
-      "status": "fail",
-      "severity": "medium",
-      "blocking": false,
-      "exit_code": 0,
-      "summary": "2 tool(s) have unpinned upper bounds in pyproject.toml causing version drift against the pins used by .pre-commit-config.yaml.",
-      "error_count": 2,
-      "errors": [
-        {
-          "tool": "ruff",
-          "pre_commit_pinned_rev": "0.6.9",
-          "pyproject_resolved_version": "0.15.22",
-          "message": "pre-commit pins an older ruff release than pyproject.toml's unbounded 'ruff>=0.6.0' resolves to; local/CI lint results and the pre-commit hook can disagree."
-        },
-        {
-          "tool": "mypy",
-          "pre_commit_pinned_rev": "1.11.2",
-          "pyproject_resolved_version": "2.3.0",
-          "message": "pre-commit pins an older mypy release than pyproject.toml's unbounded 'mypy>=1.11.0' resolves to; stricter checks in newer mypy releases can surface errors in CI/local `mypy src` runs that the pinned pre-commit hook (when its environment can even build) would not."
-        }
-      ],
       "notes": [],
-      "raw_output_excerpt": null
+      "raw_output_excerpt": "ERROR: missing env var: GATE_LOCAL_NODE\nERROR: failed to import constellation_gate.api.main: cannot import name 'observe_execution_latency' from 'constellation_gate.observability.metrics' (/workspace/constellation-gate/src/constellation_gate/observability/metrics.py)\nERROR: failed to import constellation_gate.services.execute_service: cannot import name 'observe_execution_latency' from 'constellation_gate.observability.metrics' (/workspace/constellation-gate/src/constellation_gate/observability/metrics.py)"
     }
   ],
   "supplemental_manual_findings": {
     "pytest_deep_scan": {
-      "description": "One-off manual deeper scan performed during this discovery session. tests/conftest.py cannot be imported (see pytest-collection check), which blocks 100% of automated test collection. To see what additional errors exist *underneath* that blocker, two local-only patches were applied temporarily (never committed) to satisfy the two missing symbols, and the suite was then run end-to-end with a per-test timeout guard.",
+      "description": "One-off manual deeper scan performed during a discovery session. tests/conftest.py cannot be imported (see the pytest-collection check), which blocks 100% of automated test collection. To see what additional errors exist *underneath* that blocker, two local-only patches were applied temporarily (never committed) to satisfy the two missing symbols, and the suite was then run end-to-end with a per-test timeout guard.",
       "temporary_patches_applied": [
         {
           "file": "src/constellation_gate/observability/metrics.py",
@@ -1482,7 +1494,10 @@
           }
         ]
       },
-      "caveat": "This sub-report was produced by hand during the discovery session (not by this checked-in script, which stays strictly read-only) because getting past the conftest ImportError requires source modifications that a pure discovery tool must not silently apply. Re-run manually after the two blocking fixes above are applied to keep this section current."
+      "caveat": "This sub-report was produced by hand during a discovery session (not by the checked-in ci_discovery.py tool, which stays strictly read-only) because getting past the conftest ImportError requires source modifications that a pure discovery tool must not silently apply. Re-run manually after the two blocking fixes above are applied to keep this section current."
+    },
+    "dependency_resolution": {
+      "note": "constellation-node-sdk's real source lives in the separate Quantum-L9/Gate_SDK GitHub repo (package name constellation-node-sdk) but is not published to PyPI or any private index this repo is configured against. It was cloned and installed locally (pip install -e <clone>) purely to unblock local analysis; that workaround is not reproducible in a clean CI runner and is not checked into this repo."
     }
   }
 }

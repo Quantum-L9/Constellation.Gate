@@ -1,0 +1,13 @@
+{
+  "repo_name": "constellation-gate",
+  "extra_checks": [
+    {
+      "id": "predeploy-check-script",
+      "description": "scripts/predeploy_check.py runs inside scripts/entrypoint.sh before the container's uvicorn process starts, so a failure here fails container startup under the same conditions",
+      "command": ["python", "scripts/predeploy_check.py"],
+      "cwd": ".",
+      "category": "deploy-script",
+      "severity": "high"
+    }
+  ]
+}
