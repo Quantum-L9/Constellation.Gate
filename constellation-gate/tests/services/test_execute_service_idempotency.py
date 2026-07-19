@@ -40,7 +40,8 @@ async def test_idempotency_returns_cached() -> None:
         destination_node="gate",
         source_node="client",
         reply_to="client",
-    ).derive(idempotency_key="abc")
+        idempotency_key="abc",
+    )
 
     first = await service.execute(packet.model_dump_json_dict())
     second = await service.execute(packet.model_dump_json_dict())

@@ -13,7 +13,8 @@ def test_idempotency_returns_cached_response() -> None:
         destination_node="gate",
         source_node="client",
         reply_to="client",
-    ).derive(idempotency_key="abc")
+        idempotency_key="abc",
+    )
 
     store.set("abc", {"status": "ok"})
     result = enforce_idempotency(packet, store)
