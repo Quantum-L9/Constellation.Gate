@@ -4,6 +4,17 @@ from fastapi import HTTPException
 
 from constellation_gate.boundary.ingress_validator import IngressValidationError
 from constellation_gate.boundary.routing_policy import RoutingPolicyError
+from constellation_gate.resilience.backpressure import BackpressureExceededError
+from constellation_gate.resilience.circuit_breaker import CircuitBreakerOpenError
+from constellation_gate.resilience.load_shedding import LoadShedError
+from constellation_gate.resilience.rate_limiter import RateLimitExceededError
+
+_ADMISSION_ERRORS = (
+    RateLimitExceededError,
+    LoadShedError,
+    BackpressureExceededError,
+    CircuitBreakerOpenError,
+)
 
 
 def to_http_exception(exc: Exception) -> HTTPException:
@@ -15,6 +26,15 @@ def to_http_exception(exc: Exception) -> HTTPException:
             status_code=400,
             detail={
                 "code": "invalid_transport_packet",
+                "message": str(exc),
+            },
+        )
+
+    if isinstance(exc, _ADMISSION_ERRORS):
+        return HTTPException(
+            status_code=429,
+            detail={
+                "code": "admission_rejected",
                 "message": str(exc),
             },
         )

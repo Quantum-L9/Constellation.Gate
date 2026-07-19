@@ -7,6 +7,8 @@ from constellation_gate.config.settings import GateSettings, get_settings
 from constellation_gate.orchestration.workflow_engine import WorkflowEngine
 from constellation_gate.routing.dispatch import Dispatcher
 from constellation_gate.routing.node_registry import NodeRegistry
+from constellation_gate.runtime.http_client import AsyncHttpClientManager
+from constellation_gate.runtime.node_limits import PerNodeLimiterManager
 from constellation_gate.services.admin_registration_service import AdminRegistrationService
 from constellation_gate.services.execute_service import ExecuteService
 from constellation_gate.services.registry_query_service import RegistryQueryService
@@ -16,6 +18,16 @@ from constellation_gate.services.workflow_service import WorkflowService
 @lru_cache
 def get_registry() -> NodeRegistry:
     return NodeRegistry()
+
+
+@lru_cache
+def get_http_client_manager() -> AsyncHttpClientManager:
+    return AsyncHttpClientManager()
+
+
+@lru_cache
+def get_node_limiter_manager() -> PerNodeLimiterManager:
+    return PerNodeLimiterManager()
 
 
 @lru_cache

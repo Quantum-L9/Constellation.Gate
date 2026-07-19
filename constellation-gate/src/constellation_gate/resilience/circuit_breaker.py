@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from time import monotonic
+from typing import Any
 
 
 class CircuitBreakerOpenError(RuntimeError):
@@ -32,6 +34,7 @@ class CircuitBreaker:
         *,
         failure_threshold: int = 5,
         recovery_timeout_seconds: float = 30.0,
+        time_source: Callable[[], float] = monotonic,
     ) -> None:
         if failure_threshold < 1:
             raise ValueError("failure_threshold must be >= 1")
@@ -40,6 +43,7 @@ class CircuitBreaker:
 
         self._failure_threshold = failure_threshold
         self._recovery_timeout_seconds = recovery_timeout_seconds
+        self._time_source = time_source
         self._state = "closed"
         self._failure_count = 0
         self._opened_at: float | None = None
@@ -53,7 +57,7 @@ class CircuitBreaker:
         )
 
     def before_call(self, *, now: float | None = None) -> None:
-        current = monotonic() if now is None else now
+        current = self._time_source() if now is None else now
 
         if self._state == "open":
             assert self._opened_at is not None
@@ -69,7 +73,7 @@ class CircuitBreaker:
         self._opened_at = None
 
     def record_failure(self, *, now: float | None = None) -> None:
-        current = monotonic() if now is None else now
+        current = self._time_source() if now is None else now
 
         if self._state == "half_open":
             self._trip_open(now=current)
@@ -83,7 +87,7 @@ class CircuitBreaker:
         self._state = "open"
         self._opened_at = now
 
-    async def run(self, func, *args, **kwargs):
+    async def run(self, func: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any) -> Any:
         self.before_call()
         try:
             result = await func(*args, **kwargs)
