@@ -44,6 +44,10 @@ def record_dispatch(*, action: str, target_node: str, status: str) -> None:
     ).inc()
 
 
+def observe_execution_latency(*, action: str, seconds: float) -> None:
+    EXECUTION_LATENCY_SECONDS.labels(action=action.strip().lower()).observe(seconds)
+
+
 def increment_in_flight() -> None:
     IN_FLIGHT.inc()
 
