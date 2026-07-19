@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import TypeVar
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -49,7 +52,7 @@ class RetryPolicy:
         delay = self.delay_seconds * (self.backoff_multiplier ** (attempt - 1))
         return RetryDecision(should_retry=True, delay_seconds=delay)
 
-    async def run(self, func: Callable[[], Awaitable[object]]) -> object:
+    async def run(self, func: Callable[[], Awaitable[T]]) -> T:
         last_exc: BaseException | None = None
 
         for attempt in range(1, self.max_attempts + 1):

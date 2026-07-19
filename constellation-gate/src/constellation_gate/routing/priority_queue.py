@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from itertools import count
-from typing import Any
+from typing import Any, cast
 
 from constellation_node_sdk.transport.packet import TransportPacket
 
@@ -48,6 +48,10 @@ class PriorityPacketQueue:
         await self._queue.join()
 
     def debug_snapshot(self) -> tuple[dict[str, Any], ...]:
+        # asyncio.PriorityQueue keeps its heap in the private `_queue` list; there
+        # is no public iteration API, so read it through a cast for this debug-only
+        # snapshot.
+        heap = cast(list[tuple[int, int, TransportPacket]], cast(Any, self._queue)._queue)
         return tuple(
             {
                 "priority": priority,
@@ -55,5 +59,5 @@ class PriorityPacketQueue:
                 "packet_id": str(packet.header.packet_id),
                 "action": packet.header.action,
             }
-            for priority, sequence, packet in list(self._queue._queue)  # noqa: SLF001
+            for priority, sequence, packet in list(heap)
         )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from constellation_node_sdk.transport.packet import TransportPacket
 
 
@@ -13,7 +15,7 @@ class ResponseFactory:
         *,
         request_packet: TransportPacket,
         source_node: str,
-        payload: dict,
+        payload: dict[str, Any],
     ) -> TransportPacket:
         return request_packet.derive(
             packet_type="response",

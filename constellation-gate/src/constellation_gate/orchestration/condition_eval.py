@@ -107,31 +107,35 @@ class SafeConditionEvaluator:
             return tuple(self._eval(elt, context=context) for elt in node.elts)
 
         if isinstance(node, ast.Dict):
-            return {
-                self._eval(key, context=context): self._eval(value, context=context)
-                for key, value in zip(node.keys, node.values, strict=True)
-            }
+            result_dict: dict[Any, Any] = {}
+            for key, value in zip(node.keys, node.values, strict=True):
+                if key is None:
+                    raise ValueError("dict unpacking is not supported in conditions")
+                result_dict[self._eval(key, context=context)] = self._eval(
+                    value, context=context
+                )
+            return result_dict
 
         raise ValueError(f"unsupported condition syntax: {type(node).__name__}")
 
     @staticmethod
     def _apply_compare(op: ast.AST, left: Any, right: Any) -> bool:
         if isinstance(op, ast.Eq):
-            return left == right
+            return bool(left == right)
         if isinstance(op, ast.NotEq):
-            return left != right
+            return bool(left != right)
         if isinstance(op, ast.Gt):
-            return left > right
+            return bool(left > right)
         if isinstance(op, ast.GtE):
-            return left >= right
+            return bool(left >= right)
         if isinstance(op, ast.Lt):
-            return left < right
+            return bool(left < right)
         if isinstance(op, ast.LtE):
-            return left <= right
+            return bool(left <= right)
         if isinstance(op, ast.In):
-            return left in right
+            return bool(left in right)
         if isinstance(op, ast.NotIn):
-            return left not in right
+            return bool(left not in right)
         raise ValueError("unsupported comparison operator")
 
     @staticmethod

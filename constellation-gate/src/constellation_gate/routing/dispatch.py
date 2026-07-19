@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from constellation_gate.boundary.routing_policy import validate_gate_dispatch_policy
@@ -113,7 +115,7 @@ class Dispatcher:
         url: str,
         timeout_ms: int,
         packet: TransportPacket,
-    ) -> dict:
+    ) -> dict[str, Any]:
         if self._client is not None:
             response = await self._client.post(
                 url,
