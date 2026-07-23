@@ -20,7 +20,8 @@ class _FakeClock:
 
 @pytest.mark.asyncio
 async def test_circuit_breaker_opens_after_failure_threshold() -> None:
-    breaker = CircuitBreaker(failure_threshold=2, recovery_timeout_seconds=10.0)
+    clock = _FakeClock(0.0)
+    breaker = CircuitBreaker(failure_threshold=2, recovery_timeout_seconds=10.0, time_source=clock)
 
     async def fail():
         raise TimeoutError("temporary")
@@ -30,10 +31,19 @@ async def test_circuit_breaker_opens_after_failure_threshold() -> None:
     with pytest.raises(TimeoutError):
         await breaker.run(fail)
 
+    # Breaker tripped open at clock time 0.0; probe before the 10s recovery
+    # window elapses must be rejected. The original version passed a wall-time
+    # literal (now=100.0) against a real-monotonic opened_at, which made the
+    # outcome depend on host uptime: flaky-fail on CI, pass locally.
     with pytest.raises(CircuitBreakerOpenError):
-        breaker.before_call(now=100.0)
+        breaker.before_call(now=5.0)
 
     assert breaker.snapshot.state == "open"
+
+    # And after the recovery window it must transition to half-open, matching
+    # the documented state machine.
+    breaker.before_call(now=10.0)
+    assert breaker.snapshot.state == "half_open"
 
 
 @pytest.mark.asyncio
