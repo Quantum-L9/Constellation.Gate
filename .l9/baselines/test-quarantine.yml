@@ -1,0 +1,10 @@
+# Baseline ledger: quarantined pre-existing test failures (fail-closed debt).
+# Enforced by l9-ci-sdk baseline ratchet — see .github/workflows/baseline-ratchet-caller.yml.
+# Constellation.Gate has ZERO failing tests at adoption (161/161 passing,
+# verified at baseline commit 68ea6ed), so this ledger is intentionally
+# empty. Any future test failure fails CI unless a reviewed ledger entry
+# with owner, issue, and expiry is added in the same PR.
+# Changes to this file require CODEOWNERS review (.github/CODEOWNERS).
+schema_version: 1.0.0
+gate: tests/pytest
+entries: []

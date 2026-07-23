@@ -1,0 +1,4 @@
+# CI dependency manifest for the Baseline Ratchet reusable workflow.
+# The gate package (and its git-pinned constellation-node-sdk dependency)
+# installs editable so pytest resolves imports identically to production.
+-e ./constellation-gate[dev]

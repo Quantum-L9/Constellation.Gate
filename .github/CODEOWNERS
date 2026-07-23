@@ -1,0 +1,20 @@
+# CODEOWNERS — Constellation.Gate
+# Sibling parity:
+#   Enrichment.Inference.Engine/.github/CODEOWNERS
+#   Cognitive.Engine.Graphs/.github/CODEOWNERS
+
+# Default owner for everything
+* @cryptoxdog
+
+# Baseline-ratchet debt ledgers — human-reviewed only.
+# CI never writes these files; every entry is owned, expiring debt.
+# Any PR that touches a ledger requires explicit owner review.
+/.l9/baselines/             @cryptoxdog
+
+# Infrastructure & CI/CD workflows (protected)
+/.github/                   @cryptoxdog
+/.github/workflows/         @cryptoxdog
+
+# Package configuration (protected)
+/constellation-gate/pyproject.toml   @cryptoxdog
+/requirements-ci.txt        @cryptoxdog
