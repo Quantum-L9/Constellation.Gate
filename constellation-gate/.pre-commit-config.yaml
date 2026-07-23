@@ -31,3 +31,11 @@ repos:
           - constellation-node-sdk @ git+https://github.com/Quantum-L9/Gate_SDK.git@0d50f64574f78a8ad9c32f5c4e13fcbf5644648e
         files: ^src/
 
+  - repo: local
+    hooks:
+      - id: validate-contracts
+        name: validate-contracts
+        language: python
+        entry: python constellation-gate/scripts/validate_contracts.py
+        pass_filenames: false
+        always_run: true

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from functools import lru_cache
 
@@ -20,6 +21,34 @@ def _env_tuple(name: str, default: tuple[str, ...] = ()) -> tuple[str, ...]:
     if raw is None:
         return default
     return tuple(item.strip().lower() for item in raw.split(",") if item.strip())
+
+
+def _env_verifying_keys(name: str) -> dict[str, str]:
+    """Parse JSON object from env var into verifying_keys dict.
+
+    Returns empty dict on missing or blank value.
+    Raises ValueError on malformed JSON or non-string values so that startup
+    fails fast rather than silently disabling signature verification.
+    """
+    raw = os.getenv(name, "").strip()
+    if not raw or raw == "{}":
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{name} is not valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{name} must be a JSON object")
+    result: dict[str, str] = {}
+    for key_id, key_value in parsed.items():
+        if not isinstance(key_id, str) or not isinstance(key_value, str):
+            raise ValueError(f"{name} keys and values must all be strings")
+        k = key_id.strip()
+        v = key_value.strip()
+        if not k or not v:
+            raise ValueError(f"{name} must not contain blank key_id or key_value")
+        result[k] = v
+    return result
 
 
 class GateSettings(BaseModel):
@@ -55,6 +84,9 @@ class GateSettings(BaseModel):
     verify_hop_signatures: bool = False
     admin_token: str | None = None
 
+    # BROKEN-001: path to workflow definitions YAML file; empty/unset = workflows disabled
+    workflow_config_path: str | None = None
+
     @field_validator("environment")
     @classmethod
     def validate_environment(cls, value: str) -> str:
@@ -79,6 +111,16 @@ class GateSettings(BaseModel):
         normalized = value.strip()
         if not normalized:
             raise ValueError("optional string fields must not be blank")
+        return normalized
+
+    @field_validator("workflow_config_path")
+    @classmethod
+    def validate_workflow_config_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("workflow_config_path must not be blank")
         return normalized
 
     @field_validator(
@@ -122,6 +164,13 @@ class GateSettings(BaseModel):
 
 @lru_cache
 def get_settings() -> GateSettings:
+    # BROKEN-003: GATE_ADMIN_TOKEN is the canonical name (matches SDK).
+    # L9_GATE_ADMIN_TOKEN is accepted as a backward-compatible fallback.
+    admin_token = os.getenv("GATE_ADMIN_TOKEN") or os.getenv("L9_GATE_ADMIN_TOKEN") or None
+
+    # BROKEN-002: parse verifying keys from env; fails fast on malformed JSON
+    verifying_keys = _env_verifying_keys("L9_VERIFYING_KEYS_JSON")
+
     return GateSettings(
         environment=os.getenv("L9_ENVIRONMENT", "local"),
         local_node=os.getenv("GATE_LOCAL_NODE", "gate"),
@@ -132,7 +181,7 @@ def get_settings() -> GateSettings:
         signing_key=os.getenv("L9_SIGNING_KEY") or os.getenv("L9_SIGNING_SECRET"),
         signing_key_id=os.getenv("L9_SIGNING_KEY_ID"),
         signing_algorithm=os.getenv("L9_SIGNING_ALGORITHM"),
-        verifying_keys={},
+        verifying_keys=verifying_keys,
         allowed_actions=_env_tuple("L9_ALLOWED_ACTIONS"),
         allowed_packet_types=_env_tuple(
             "L9_ALLOWED_PACKET_TYPES",
@@ -149,5 +198,7 @@ def get_settings() -> GateSettings:
         allow_private_attachment_hosts=_env_bool("L9_ALLOW_PRIVATE_ATTACHMENT_HOSTS", False),
         replay_enabled=_env_bool("L9_REPLAY_ENABLED", True),
         verify_hop_signatures=_env_bool("L9_VERIFY_HOP_SIGNATURES", False),
-        admin_token=os.getenv("L9_GATE_ADMIN_TOKEN"),
+        admin_token=admin_token,
+        # BROKEN-001: optional workflow YAML path; None = workflows disabled
+        workflow_config_path=os.getenv("GATE_WORKFLOW_CONFIG_PATH") or None,
     )
