@@ -1,0 +1,14 @@
+# Pre-commit hooks — mechanical enforcement before commit
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+#
+# rev pinned to match the exact ruff version installed in .github/workflows/ci.yml
+# to avoid local/CI drift.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
