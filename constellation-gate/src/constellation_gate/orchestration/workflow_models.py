@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 _ALLOWED_MERGE_STRATEGIES = {"identity", "merge_payload", "merge_results"}
 
 
@@ -61,7 +60,9 @@ class WorkflowDefinition(BaseModel):
 
     @field_validator("steps", mode="before")
     @classmethod
-    def coerce_steps(cls, value: tuple[WorkflowStep, ...] | list[WorkflowStep]) -> tuple[WorkflowStep, ...]:
+    def coerce_steps(
+        cls, value: tuple[WorkflowStep, ...] | list[WorkflowStep]
+    ) -> tuple[WorkflowStep, ...]:
         if isinstance(value, list):
             return tuple(value)
         return value

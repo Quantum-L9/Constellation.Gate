@@ -8,6 +8,16 @@ from constellation_gate.resilience.circuit_breaker import (
 )
 
 
+class _FakeClock:
+    """Controllable monotonic clock so run() and before_call() share a timeline."""
+
+    def __init__(self, start: float = 0.0) -> None:
+        self.now = start
+
+    def __call__(self) -> float:
+        return self.now
+
+
 @pytest.mark.asyncio
 async def test_circuit_breaker_opens_after_failure_threshold() -> None:
     breaker = CircuitBreaker(failure_threshold=2, recovery_timeout_seconds=10.0)
@@ -28,7 +38,8 @@ async def test_circuit_breaker_opens_after_failure_threshold() -> None:
 
 @pytest.mark.asyncio
 async def test_circuit_breaker_half_open_then_closes_on_success() -> None:
-    breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_seconds=5.0)
+    clock = _FakeClock(0.0)
+    breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_seconds=5.0, time_source=clock)
 
     async def fail():
         raise TimeoutError("temporary")
@@ -45,6 +56,7 @@ async def test_circuit_breaker_half_open_then_closes_on_success() -> None:
     breaker.before_call(now=6.1)
     assert breaker.snapshot.state == "half_open"
 
+    clock.now = 6.1
     result = await breaker.run(succeed)
     assert result == "ok"
     assert breaker.snapshot.state == "closed"
@@ -53,7 +65,8 @@ async def test_circuit_breaker_half_open_then_closes_on_success() -> None:
 
 @pytest.mark.asyncio
 async def test_circuit_breaker_half_open_reopens_on_failure() -> None:
-    breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_seconds=5.0)
+    clock = _FakeClock(0.0)
+    breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_seconds=5.0, time_source=clock)
 
     async def fail():
         raise TimeoutError("temporary")

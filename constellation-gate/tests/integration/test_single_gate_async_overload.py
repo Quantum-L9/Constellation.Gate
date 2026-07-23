@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import pytest
-
-from constellation_gate.runtime.node_limits import PerNodeLimiterManager
-from constellation_gate.routing.dispatch import Dispatcher
-from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
 from constellation_node_sdk.transport.packet import create_transport_packet
 from constellation_node_sdk.transport.provenance import RoutingProvenance
+
+from constellation_gate.routing.dispatch import Dispatcher
+from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
+from constellation_gate.runtime.node_limits import (
+    NodeLimitExceededError,
+    PerNodeLimiterManager,
+)
 
 
 class FastClient:
@@ -68,7 +71,7 @@ async def test_single_gate_async_overload_rejects_when_node_limit_is_saturated()
         ),
     )
 
-    with pytest.raises(Exception):
+    with pytest.raises(NodeLimitExceededError):
         await dispatcher.dispatch(packet)
 
     node_limits.release("score")

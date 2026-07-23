@@ -5,7 +5,10 @@ import pytest
 from constellation_gate.resilience.admission_controller import AdmissionController
 from constellation_gate.resilience.backpressure import BackpressurePolicy
 from constellation_gate.resilience.load_shedding import LoadSheddingPolicy
-from constellation_gate.resilience.rate_limiter import FixedWindowRateLimiter, RateLimitExceededError
+from constellation_gate.resilience.rate_limiter import (
+    FixedWindowRateLimiter,
+    RateLimitExceededError,
+)
 
 
 def test_admission_controller_allows_when_under_all_limits() -> None:

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from constellation_node_sdk.transport.packet import create_transport_packet
 from fastapi.testclient import TestClient
 
 from constellation_gate.api import dependencies as deps
 from constellation_gate.api.main import create_app
-from constellation_node_sdk.transport.packet import create_transport_packet
 
 
 class FakeExecuteService:

@@ -22,7 +22,9 @@ class MemoryMapper:
             "destination_node": packet.address.destination_node,
             "tenant_org_id": packet.tenant.org_id,
             "root_id": str(packet.lineage.root_id),
-            "parent_id": None if packet.lineage.parent_id is None else str(packet.lineage.parent_id),
+            "parent_id": (
+                None if packet.lineage.parent_id is None else str(packet.lineage.parent_id)
+            ),
             "generation": packet.lineage.generation,
             "payload": packet.payload,
             "transport_hash": packet.security.transport_hash,

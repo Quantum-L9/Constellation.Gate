@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from constellation_node_sdk.transport.packet import TransportPacket
+
+
+class _PacketValidator(Protocol):
+    def validate(self, body: dict[str, Any]) -> TransportPacket: ...
 
 
 @dataclass(frozen=True)
@@ -33,7 +37,7 @@ class CommandFactory:
         self,
         *,
         body: dict[str, Any],
-        validator,
+        validator: _PacketValidator,
         context: ExecutionContext,
     ) -> ExecuteCommand:
         packet = validator.validate(body)

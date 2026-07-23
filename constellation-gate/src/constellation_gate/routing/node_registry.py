@@ -87,7 +87,7 @@ class NodeRegistry:
         self._lock = RLock()
 
     def load_from_yaml(self, path: str) -> None:
-        with open(path, "r", encoding="utf-8") as handle:
+        with open(path, encoding="utf-8") as handle:
             raw = yaml.safe_load(handle)
 
         if not isinstance(raw, dict):
@@ -105,7 +105,9 @@ class NodeRegistry:
         with self._lock:
             self._nodes = loaded
 
-    def register_node(self, name: str, registration: NodeRegistration, *, overwrite: bool = False) -> None:
+    def register_node(
+        self, name: str, registration: NodeRegistration, *, overwrite: bool = False
+    ) -> None:
         normalized_name = name.strip().lower()
         if not normalized_name:
             raise ValueError("name must not be empty")

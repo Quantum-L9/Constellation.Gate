@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
 
 from constellation_gate.services.workflow_service import WorkflowService
-from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
 
 
 class FakeWorkflowEngine:

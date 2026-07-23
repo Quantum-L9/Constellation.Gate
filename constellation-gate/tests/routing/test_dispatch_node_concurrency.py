@@ -4,12 +4,12 @@ import asyncio
 
 import httpx
 import pytest
+from constellation_node_sdk.transport.packet import create_transport_packet
+from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 from constellation_gate.routing.dispatch import Dispatcher
 from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
 from constellation_gate.runtime.node_limits import NodeLimitExceededError, PerNodeLimiterManager
-from constellation_node_sdk.transport.packet import create_transport_packet
-from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 
 class BlockingClient:
@@ -30,7 +30,11 @@ class BlockingClient:
             source_node="score",
             reply_to="gate",
         )
-        return httpx.Response(status_code=200, json=response_packet.model_dump_json_dict(), request=request)
+        return httpx.Response(
+            status_code=200,
+            json=response_packet.model_dump_json_dict(),
+            request=request,
+        )
 
 
 @pytest.mark.asyncio

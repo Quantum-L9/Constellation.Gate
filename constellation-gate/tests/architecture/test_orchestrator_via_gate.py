@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.boundary.delegation_factory import DelegationFactory
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.boundary.delegation_factory import DelegationFactory
 
 
 def test_orchestrator_follow_up_work_targets_gate_not_peer() -> None:

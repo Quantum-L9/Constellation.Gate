@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from constellation_gate.observability.tracing import dispatch_trace, packet_trace
 from constellation_node_sdk.transport.packet import create_transport_packet
+
+from constellation_gate.observability.tracing import dispatch_trace, packet_trace
 
 
 def test_packet_trace_contains_lineage_fields() -> None:

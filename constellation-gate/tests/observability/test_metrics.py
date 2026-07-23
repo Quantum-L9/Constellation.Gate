@@ -19,10 +19,15 @@ def test_record_request_increments_counter() -> None:
     assert after == before + 1
 
 
+def _dispatch_counter_value() -> float:
+    labeled = DISPATCHES_TOTAL.labels(action="score", target_node="score", status="delegated")
+    return labeled._value.get()  # noqa: SLF001
+
+
 def test_record_dispatch_increments_counter() -> None:
-    before = DISPATCHES_TOTAL.labels(action="score", target_node="score", status="delegated")._value.get()  # noqa: SLF001
+    before = _dispatch_counter_value()
     record_dispatch(action="score", target_node="score", status="delegated")
-    after = DISPATCHES_TOTAL.labels(action="score", target_node="score", status="delegated")._value.get()  # noqa: SLF001
+    after = _dispatch_counter_value()
 
     assert after == before + 1
 

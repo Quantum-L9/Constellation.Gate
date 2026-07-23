@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from constellation_gate.routing.node_registry import NodeRegistry, NodeRegistration
+from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
 from constellation_gate.runtime.registry_status import registry_status
 
 

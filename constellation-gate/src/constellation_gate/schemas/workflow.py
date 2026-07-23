@@ -25,7 +25,9 @@ class WorkflowStepSchema(BaseModel):
     def validate_payload_transform(cls, value: str) -> str:
         normalized = value.strip().lower()
         if normalized not in {"identity", "merge_payload", "merge_results"}:
-            raise ValueError("payload_transform must be one of identity, merge_payload, merge_results")
+            raise ValueError(
+                "payload_transform must be one of identity, merge_payload, merge_results"
+            )
         return normalized
 
     @field_validator("condition", "target_node")
