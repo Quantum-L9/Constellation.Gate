@@ -71,3 +71,38 @@ def test_load_workflow_definitions_invalid_step_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="failed validation"):
         _load_workflow_definitions(str(config_file))
+
+
+def test_load_workflow_definitions_legacy_step_syntax(tmp_path: Path) -> None:
+    """Legacy steps using payload_transform and no name must normalize and load."""
+    config_file = tmp_path / "workflows.yaml"
+    config_file.write_text(
+        textwrap.dedent("""\
+            workflows:
+              full_pipeline:
+                description: legacy syntax
+                steps:
+                  - action: enrich
+                    payload_transform: merge_payload
+                  - action: score
+                    payload_transform: merge_results
+        """)
+    )
+    defs = _load_workflow_definitions(str(config_file))
+    steps = defs["full_pipeline"].steps
+    assert [s.name for s in steps] == ["enrich-1", "score-2"]
+    assert [s.merge_strategy for s in steps] == ["merge_payload", "merge_results"]
+
+
+def test_load_workflow_definitions_shipped_config_loads() -> None:
+    """The repository's bundled workflows.yaml must load without error."""
+    shipped = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "constellation_gate"
+        / "config"
+        / "workflows.yaml"
+    )
+    defs = _load_workflow_definitions(str(shipped))
+    assert "full_pipeline" in defs
+    assert all(step.name for wf in defs.values() for step in wf.steps)

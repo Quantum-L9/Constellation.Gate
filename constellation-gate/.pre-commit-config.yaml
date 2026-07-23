@@ -36,6 +36,6 @@ repos:
       - id: validate-contracts
         name: validate-contracts
         language: python
-        entry: python scripts/validate_contracts.py
+        entry: python constellation-gate/scripts/validate_contracts.py
         pass_filenames: false
         always_run: true

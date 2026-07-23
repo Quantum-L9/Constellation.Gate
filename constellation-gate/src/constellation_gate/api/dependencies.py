@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -117,11 +118,38 @@ def _load_workflow_definitions(path: str) -> dict[str, WorkflowDefinition]:
         # Inject name into definition if not already present
         if "name" not in defn_raw:
             defn_raw = {"name": name, **defn_raw}
+        defn_raw = _normalize_workflow_steps(defn_raw)
         try:
             definitions[name.strip().lower()] = WorkflowDefinition.model_validate(defn_raw)
         except Exception as exc:
             raise ValueError(f"'{path}': workflow '{name}' failed validation: {exc}") from exc
     return definitions
+
+
+def _normalize_workflow_steps(defn_raw: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy step syntax to the WorkflowStep schema.
+
+    The shipped workflow config (config/workflows.yaml) predates WorkflowStep and
+    uses `payload_transform` where the model expects `merge_strategy`, and omits
+    per-step `name`. Map the legacy keys and synthesize deterministic step names
+    (`<action>-<index>`) so both syntaxes load. Unknown keys are left intact so
+    model validation still rejects genuinely malformed steps.
+    """
+    steps_raw = defn_raw.get("steps")
+    if not isinstance(steps_raw, list):
+        return defn_raw
+    normalized_steps: list[Any] = []
+    for index, step in enumerate(steps_raw):
+        if not isinstance(step, dict):
+            normalized_steps.append(step)
+            continue
+        step = dict(step)
+        if "merge_strategy" not in step and "payload_transform" in step:
+            step["merge_strategy"] = step.pop("payload_transform")
+        if "name" not in step and isinstance(step.get("action"), str):
+            step["name"] = f"{step['action'].strip().lower()}-{index + 1}"
+        normalized_steps.append(step)
+    return {**defn_raw, "steps": normalized_steps}
 
 
 @lru_cache

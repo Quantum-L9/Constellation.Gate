@@ -5,13 +5,15 @@ Checks:
   1. contracts/transport-packet.schema.json is valid JSON.
   2. All required top-level fields are present in the schema.
   3. The $id matches the canonical contract URL.
-  4. SDK schema parity: if SDK schema is available at a sibling path, verify
-     that all required-array entries and additionalProperties=false are present.
+  4. Constraint invariants: header.action pattern, and exact enum membership for
+     security.signature_algorithm, hop_trace.items.status, and
+     hop_trace.items.hop_signature_algorithm.
 
 Exit codes:
   0 — all checks pass
   1 — one or more checks failed
 """
+
 from __future__ import annotations
 
 import json
@@ -95,16 +97,36 @@ else:
         "Expected: '^[a-z0-9][a-z0-9-]{0,63}$'"
     )
 
-# Check security.signature_algorithm has enum or anyOf with enum
-sig_alg_def = schema.get("properties", {}).get("security", {}).get("properties", {}).get("signature_algorithm", {})
-has_algo_constraint = (
-    "enum" in sig_alg_def
-    or any("enum" in branch for branch in sig_alg_def.get("anyOf", []))
+
+def _enum_values(definition: dict) -> set[str] | None:
+    """Collect enum members from a definition or its anyOf branches; None if absent."""
+    if "enum" in definition:
+        return {v for v in definition["enum"] if isinstance(v, str)}
+    branches = [b for b in definition.get("anyOf", []) if "enum" in b]
+    if branches:
+        return {v for b in branches for v in b["enum"] if isinstance(v, str)}
+    return None
+
+
+def check_enum(label: str, definition: dict, expected: set[str]) -> None:
+    """Fail unless the definition's enum members exactly match the expected set."""
+    values = _enum_values(definition)
+    if values is None:
+        fail(f"{label} must have enum constraint restricting to {sorted(expected)}")
+    elif values != expected:
+        fail(f"{label} enum drift: got {sorted(values)}, expected {sorted(expected)}")
+    else:
+        ok(f"{label} enum matches {sorted(expected)}")
+
+
+# Check security.signature_algorithm enum members exactly
+sig_alg_def = (
+    schema.get("properties", {})
+    .get("security", {})
+    .get("properties", {})
+    .get("signature_algorithm", {})
 )
-if has_algo_constraint:
-    ok("security.signature_algorithm has enum constraint")
-else:
-    fail("security.signature_algorithm must have enum constraint restricting to [hmac-sha256, ed25519]")
+check_enum("security.signature_algorithm", sig_alg_def, {"hmac-sha256", "ed25519"})
 
 # Check hop.status has enum constraint
 status_def = (
@@ -114,14 +136,13 @@ status_def = (
     .get("properties", {})
     .get("status", {})
 )
-has_status_enum = (
-    "enum" in status_def
-    or any("enum" in branch for branch in status_def.get("anyOf", []))
-)
-if has_status_enum:
-    ok("hop_trace.items.status has enum constraint")
-else:
+status_enum = _enum_values(status_def)
+if status_enum is None:
     fail("hop_trace.items.status must have enum constraint")
+elif not status_enum:
+    fail("hop_trace.items.status enum must not be empty")
+else:
+    ok(f"hop_trace.items.status has enum constraint: {sorted(status_enum)}")
 
 # Check hop.hop_signature_algorithm has enum constraint
 hop_sig_alg_def = (
@@ -131,14 +152,11 @@ hop_sig_alg_def = (
     .get("properties", {})
     .get("hop_signature_algorithm", {})
 )
-has_hop_sig_alg_constraint = (
-    "enum" in hop_sig_alg_def
-    or any("enum" in branch for branch in hop_sig_alg_def.get("anyOf", []))
+check_enum(
+    "hop_trace.items.hop_signature_algorithm",
+    hop_sig_alg_def,
+    {"hmac-sha256", "ed25519"},
 )
-if has_hop_sig_alg_constraint:
-    ok("hop_trace.items.hop_signature_algorithm has enum constraint")
-else:
-    fail("hop_trace.items.hop_signature_algorithm must have enum constraint")
 
 print()
 if failures:
