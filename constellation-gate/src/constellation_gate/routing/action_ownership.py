@@ -4,6 +4,7 @@ Authority: TASK-002 approved action registry (PlasticOS path).
 One semantic owner per canonical action. Multiple replicas of the same
 owner are allowed; cross-owner claims are collisions and must fail closed.
 """
+
 from __future__ import annotations
 
 from typing import Final

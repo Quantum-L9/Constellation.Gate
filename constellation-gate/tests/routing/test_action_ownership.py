@@ -1,4 +1,5 @@
 """Action ownership and shared-registry enforcement (TASK-012)."""
+
 from __future__ import annotations
 
 import pytest
@@ -103,7 +104,6 @@ def test_admin_registration_surfaces_ownership_error() -> None:
 
     with pytest.raises(ActionOwnershipError):
         asyncio.run(service.register(request=request, overwrite=False, presented_token=None))
-
 
 
 def test_registration_and_workflow_share_same_registry_instance() -> None:
