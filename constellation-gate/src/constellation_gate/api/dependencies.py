@@ -16,6 +16,7 @@ from constellation_gate.routing.node_registry import NodeRegistry
 from constellation_gate.runtime.http_client import AsyncHttpClientManager
 from constellation_gate.runtime.node_limits import PerNodeLimiterManager
 from constellation_gate.services.admin_registration_service import AdminRegistrationService
+from constellation_gate.services.capability_service import CapabilityService
 from constellation_gate.services.execute_service import ExecuteService
 from constellation_gate.services.registry_query_service import RegistryQueryService
 from constellation_gate.services.workflow_service import WorkflowService
@@ -204,6 +205,12 @@ def get_admin_registration_service() -> AdminRegistrationService:
 @lru_cache
 def get_registry_query_service() -> RegistryQueryService:
     return RegistryQueryService(get_registry())
+
+
+@lru_cache
+def get_capability_service() -> CapabilityService:
+    settings = get_gate_settings()
+    return CapabilityService(get_registry(), admin_token=settings.admin_token)
 
 
 @lru_cache

@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Header, Query, Request
+from fastapi import FastAPI, Header, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 from constellation_gate.api import dependencies as deps
@@ -12,6 +12,7 @@ from constellation_gate.api.errors import to_http_exception
 from constellation_gate.runtime.app_state import AppState
 from constellation_gate.runtime.metrics_endpoint import router as metrics_router
 from constellation_gate.schemas.registry import RegisterNodesRequest
+from constellation_gate.services.capability_service import CapabilityAuthorizationError
 
 
 def create_app() -> FastAPI:
@@ -62,6 +63,47 @@ def create_app() -> FastAPI:
         try:
             service = deps.get_registry_query_service()
             return service.snapshot()
+        except Exception as exc:  # noqa: BLE001
+            raise to_http_exception(exc) from exc
+
+    @app.get("/v1/capabilities")
+    async def list_capabilities(
+        response: Response,
+        include_protected: bool = Query(False),
+        if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+        x_admin_token: str | None = Header(default=None),
+    ) -> Any:
+        try:
+            service = deps.get_capability_service()
+            payload = service.list_capabilities(
+                presented_token=x_admin_token,
+                include_protected=include_protected,
+            )
+            if if_none_match is not None and if_none_match.strip() == payload.etag:
+                return Response(status_code=304, headers={"ETag": payload.etag})
+            response.headers["ETag"] = payload.etag
+            return payload.model_dump(mode="json")
+        except CapabilityAuthorizationError as exc:
+            raise to_http_exception(exc) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise to_http_exception(exc) from exc
+
+    @app.get("/v1/capabilities/{action}")
+    async def get_capability(
+        action: str,
+        response: Response,
+        if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+        x_admin_token: str | None = Header(default=None),
+    ) -> Any:
+        try:
+            service = deps.get_capability_service()
+            descriptor, etag = service.get_capability(action, presented_token=x_admin_token)
+            if if_none_match is not None and if_none_match.strip() == etag:
+                return Response(status_code=304, headers={"ETag": etag})
+            response.headers["ETag"] = etag
+            return descriptor.model_dump(mode="json")
+        except CapabilityAuthorizationError as exc:
+            raise to_http_exception(exc) from exc
         except Exception as exc:  # noqa: BLE001
             raise to_http_exception(exc) from exc
 
