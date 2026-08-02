@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from constellation_gate.routing.action_ownership import ActionOwnershipError
 from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
 from constellation_gate.schemas.registry import (
     NodeRegistrationStatus,
@@ -43,7 +44,10 @@ class AdminRegistrationService:
                 healthy=True,
                 active_requests=0,
             )
-            self._registry.register_node(node_name, registration, overwrite=overwrite)
+            try:
+                self._registry.register_node(node_name, registration, overwrite=overwrite)
+            except ActionOwnershipError:
+                raise
             statuses.append(
                 NodeRegistrationStatus(
                     node_name=node_name.strip().lower(),
