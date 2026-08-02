@@ -8,6 +8,7 @@ from constellation_node_sdk.transport.provenance import RoutingProvenance
 from constellation_gate.orchestration.condition_eval import SafeConditionEvaluator
 from constellation_gate.orchestration.workflow_models import WorkflowDefinition, WorkflowStep
 from constellation_gate.routing.dispatch import Dispatcher
+from constellation_gate.routing.node_registry import NodeRegistry
 
 
 class WorkflowEngine:
@@ -25,6 +26,7 @@ class WorkflowEngine:
         *,
         local_node: str = "gate",
         condition_evaluator: SafeConditionEvaluator | None = None,
+        registry: NodeRegistry | None = None,
     ) -> None:
         self._definitions = {
             name.strip().lower(): definition for name, definition in definitions.items()
@@ -32,6 +34,37 @@ class WorkflowEngine:
         self._dispatcher = dispatcher
         self._local_node = local_node.strip().lower()
         self._condition_evaluator = condition_evaluator or SafeConditionEvaluator()
+        self._registry = registry
+        if self._registry is not None:
+            self.validate_definitions_against_registry()
+
+    @property
+    def registry(self) -> NodeRegistry | None:
+        return self._registry
+
+    def validate_definitions_against_registry(self) -> None:
+        """Ensure workflow step actions are not backed by a private action index.
+
+        When the shared registry already has registrations, every step action must
+        either be another workflow name or an action advertised in that registry.
+        Empty registries defer checks until nodes register (execute still resolves
+        via the same registry through Dispatcher).
+        """
+        if self._registry is None:
+            return
+        registered_actions = self._registry.all_supported_actions()
+        if not registered_actions:
+            return
+        known = set(self._definitions) | registered_actions
+        for workflow_name, definition in self._definitions.items():
+            for step in definition.steps:
+                action = step.action.strip().lower()
+                if action not in known:
+                    raise ValueError(
+                        f"workflow {workflow_name!r} step action {action!r} is not "
+                        "present in the shared NodeRegistry (registration/workflow "
+                        "must use the same registry)"
+                    )
 
     def has_workflow(self, name: str) -> bool:
         return name.strip().lower() in self._definitions

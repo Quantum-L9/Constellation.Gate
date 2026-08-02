@@ -176,6 +176,7 @@ def get_workflow_engine() -> WorkflowEngine:
         definitions=definitions,
         dispatcher=get_dispatcher(),
         local_node=settings.local_node,
+        registry=get_registry(),
     )
 
 

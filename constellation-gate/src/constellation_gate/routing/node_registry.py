@@ -6,6 +6,12 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from constellation_gate.routing.action_ownership import (
+    ActionOwnershipError,
+    assert_registration_ownership,
+    owner_for_registration,
+)
+
 
 class NodeRegistration(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -117,7 +123,36 @@ class NodeRegistry:
                 raise ValueError(f"node already registered: {normalized_name}")
             if normalized_name != registration.node_name:
                 registration = registration.model_copy(update={"node_name": normalized_name})
+
+            existing = {
+                node: tuple(reg.supported_actions)
+                for node, reg in self._nodes.items()
+                if not (overwrite and node == normalized_name)
+            }
+            existing_owners = {
+                node: owner_for_registration(node_name=node, metadata=dict(reg.metadata))
+                for node, reg in self._nodes.items()
+                if not (overwrite and node == normalized_name)
+            }
+            try:
+                assert_registration_ownership(
+                    node_name=normalized_name,
+                    supported_actions=registration.supported_actions,
+                    metadata=dict(registration.metadata),
+                    existing=existing,
+                    existing_owners=existing_owners,
+                )
+            except ActionOwnershipError:
+                raise
+
             self._nodes[normalized_name] = registration
+
+    def all_supported_actions(self) -> set[str]:
+        with self._lock:
+            actions: set[str] = set()
+            for registration in self._nodes.values():
+                actions.update(registration.supported_actions)
+            return actions
 
     def resolve_action(self, action: str) -> NodeRegistration:
         normalized_action = action.strip().lower()
