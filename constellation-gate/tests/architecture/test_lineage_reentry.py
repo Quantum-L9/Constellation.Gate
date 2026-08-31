@@ -71,11 +71,23 @@ async def test_lineage_is_preserved_across_gate_reentry_and_dispatch() -> None:
     assert len(fake_client.calls) == 1
     posted_packet = TransportPacket.model_validate(fake_client.calls[0]["json"])
 
+    # Ancestry is carried by lineage -- that is what "preserved across reentry"
+    # means, and it is unaffected by how hops are scoped.
     assert posted_packet.lineage.parent_id == ingress_packet.header.packet_id
     assert posted_packet.lineage.root_id == ingress_packet.lineage.root_id
     assert posted_packet.lineage.generation == ingress_packet.lineage.generation + 1
     assert posted_packet.provenance.origin_kind == "gate"
     assert posted_packet.provenance.original_source_node == "orchestrator"
-    assert len(posted_packet.hop_trace) == 2
-    assert posted_packet.hop_trace[0].direction == "ingress"
-    assert posted_packet.hop_trace[1].direction == "dispatch"
+
+    # hop_trace is per-packet observational state, NOT ancestry. A parent hop is
+    # bound to the parent's packet_id and transport_hash, so carrying it into the
+    # child makes the child fail canonical hop validation at the worker. The child
+    # therefore carries exactly its own dispatch hop, bound to its own packet_id.
+    assert len(posted_packet.hop_trace) == 1
+    dispatch_hop = posted_packet.hop_trace[0]
+    assert dispatch_hop.direction == "dispatch"
+    assert dispatch_hop.packet_id == posted_packet.header.packet_id
+    assert dispatch_hop.target_node == "score"
+
+    # The ingress observation stays where it was observed: on the parent.
+    assert all(hop.packet_id == posted_packet.header.packet_id for hop in posted_packet.hop_trace)

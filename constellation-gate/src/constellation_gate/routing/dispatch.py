@@ -8,6 +8,7 @@ from constellation_node_sdk.transport.packet import TransportPacket
 from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 from constellation_gate.boundary.routing_policy import validate_gate_dispatch_policy
+from constellation_gate.resilience.deadline import Deadline
 from constellation_gate.routing.node_registry import NodeRegistry
 from constellation_gate.routing.resolver import RouteResolver
 from constellation_gate.runtime.node_limits import PerNodeLimiterManager
@@ -34,7 +35,12 @@ class Dispatcher:
         self._client = client
         self._node_limits = node_limits
 
-    async def dispatch(self, packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: Deadline | None = None,
+    ) -> TransportPacket:
         target = self._resolver.resolve(packet)
 
         ingress_observed = packet.with_hop(
@@ -57,6 +63,11 @@ class Dispatcher:
                 origin_kind="gate",
                 requested_action=ingress_observed.header.action,
                 resolved_by_gate=True,
+                # Canonical worker ingress requires route_kind. The SDK's
+                # validate_execute_ingress_packet() accepts only
+                # "external_ingress" on /v1/execute, so a Gate-authored dispatch
+                # that omits it is rejected by every SDK-based worker.
+                route_kind="external_ingress",
                 original_source_node=ingress_observed.address.source_node,
             ),
         )
@@ -64,6 +75,8 @@ class Dispatcher:
         # The dispatch hop must be keyed to the freshly derived packet's id;
         # deriving mints a new packet_id, so build the hop from dispatch_base
         # (not the pre-derive packet) or with_hop() will reject the mismatch.
+        # derive() also resets hop_trace: hops are per-packet observational
+        # state bound to one packet_id, while lineage carries the ancestry.
         dispatch_packet = dispatch_base.with_hop(
             make_dispatch_hop(
                 packet=dispatch_base,
@@ -94,7 +107,10 @@ class Dispatcher:
             try:
                 response = await self._post_dispatch_packet(
                     url=f"{target.internal_url}/v1/execute",
-                    timeout_ms=target.timeout_ms,
+                    timeout_seconds=self._attempt_timeout_seconds(
+                        node_timeout_ms=target.timeout_ms,
+                        deadline=deadline,
+                    ),
                     packet=dispatch_packet,
                 )
             except httpx.TransportError as exc:
@@ -107,11 +123,30 @@ class Dispatcher:
             if acquired_limit and self._node_limits is not None:
                 self._node_limits.release(target.node_name)
 
+    @staticmethod
+    def _attempt_timeout_seconds(
+        *,
+        node_timeout_ms: int,
+        deadline: Deadline | None,
+    ) -> float:
+        """Budget for one worker attempt (ADR-GATE-008).
+
+        A downstream attempt never gets a fresh full timeout. It receives
+        ``min(remaining packet budget, node-configured cap)``; with no deadline
+        supplied the node cap stands alone.
+        """
+        node_cap_seconds = node_timeout_ms / 1000
+        if deadline is None:
+            return node_cap_seconds
+
+        deadline.raise_if_expired(stage="worker dispatch")
+        return deadline.bounded_by(node_cap_seconds)
+
     async def _post_dispatch_packet(
         self,
         *,
         url: str,
-        timeout_ms: int,
+        timeout_seconds: float,
         packet: TransportPacket,
     ) -> dict[str, Any]:
         if self._client is not None:
@@ -119,7 +154,7 @@ class Dispatcher:
                 url,
                 json=packet.model_dump_json_dict(),
                 headers={"Content-Type": "application/json"},
-                timeout=timeout_ms / 1000,
+                timeout=timeout_seconds,
             )
             response.raise_for_status()
             body = response.json()
@@ -127,7 +162,7 @@ class Dispatcher:
                 raise ValueError("dispatch response body must be a JSON object")
             return body
 
-        async with httpx.AsyncClient(timeout=timeout_ms / 1000) as client:
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
             response = await client.post(
                 url,
                 json=packet.model_dump_json_dict(),
