@@ -4,7 +4,8 @@ CONSTELLATION.GATE PR FINDINGS BRIEF
 REPOSITORY:
   name: Quantum-L9/Constellation.Gate
   branch: claude/gate-routing-sdk-transport-4btf4g
-  candidate_head_sha: 2f1a76487da518c0722629ccdb4f558b8573e09f
+  candidate_head_sha: 316f6faf2c122e5032495916dc4dfe9a0461fd5c
+  code_head_validated_by_make_pr: 2f1a76487da518c0722629ccdb4f558b8573e09f  # tip adds this brief only
   base: origin/main @ 545eda4259121dbce85c084385f68d00632981d7
 
 MAKE PR:
@@ -21,7 +22,7 @@ REMOTE PR:
   number: null
   url: null
   base: main
-  remote_head_sha: 2f1a76487da518c0722629ccdb4f558b8573e09f   # branch pushed, matches local
+  remote_head_sha: 316f6faf2c122e5032495916dc4dfe9a0461fd5c   # pushed, matches local
 
 VERDICT:
   routing: GO
