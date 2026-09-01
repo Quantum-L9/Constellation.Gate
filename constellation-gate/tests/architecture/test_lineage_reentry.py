@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from constellation_node_sdk.security.validation import validate_transport_packet
 from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
 from constellation_node_sdk.transport.provenance import RoutingProvenance
 
@@ -76,6 +77,27 @@ async def test_lineage_is_preserved_across_gate_reentry_and_dispatch() -> None:
     assert posted_packet.lineage.generation == ingress_packet.lineage.generation + 1
     assert posted_packet.provenance.origin_kind == "gate"
     assert posted_packet.provenance.original_source_node == "orchestrator"
-    assert len(posted_packet.hop_trace) == 2
-    assert posted_packet.hop_trace[0].direction == "ingress"
-    assert posted_packet.hop_trace[1].direction == "dispatch"
+
+    # The child carries exactly ONE hop: its own dispatch hop, bound to its own
+    # packet_id. Parentage lives in `lineage`, not in hop_trace.
+    #
+    # This previously asserted two hops -- the parent's ingress hop inherited
+    # across derive() plus the dispatch hop. That inherited hop is bound to the
+    # PARENT's packet_id, so `validate_hop_trace` rejects it: the packet Gate
+    # emitted could not be accepted by any SDK worker. The assertion below is
+    # the property that catches that class of bug.
+    assert len(posted_packet.hop_trace) == 1
+    assert posted_packet.hop_trace[0].direction == "dispatch"
+    assert posted_packet.hop_trace[0].packet_id == posted_packet.header.packet_id
+
+    # The dispatched packet must survive the SDK runtime validation a real
+    # worker applies on ingress.
+    validate_transport_packet(
+        posted_packet,
+        local_node="score",
+        require_signature=False,
+        dev_mode=True,
+    )
+
+    # The parent's own ingress hop is still observable on the parent.
+    assert ingress_packet.hop_trace == ()

@@ -6,3 +6,6 @@
 # Local Cursor / Suite 6 (templates from GlobalCommands; do not commit)
 .cursorrules
 .suite6-config.json
+.venv/
+dist/
+build/

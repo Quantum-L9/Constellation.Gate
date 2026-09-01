@@ -2,7 +2,7 @@ PYTHON ?= python
 PIP ?= pip
 PYTEST ?= pytest
 
-.PHONY: install install-dev lint typecheck test test-unit test-integration clean
+.PHONY: install install-dev lint typecheck test test-unit test-integration contracts pr clean
 
 install:
 	$(PIP) install -e .
@@ -25,18 +25,14 @@ test-unit:
 test-integration:
 	$(PYTEST) -q tests/integration
 
+contracts:
+	$(PYTHON) scripts/validate_contracts.py
+
+# Local validation gate. This target does NOT push, publish, or open a remote
+# pull request -- it is the repository's canonical pre-PR verification run.
+pr: lint typecheck contracts test
+
 clean:
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 	rm -rf .pytest_cache .mypy_cache .ruff_cache dist build *.egg-info
-
-------------
-
-
-
-
-
-
-
-
-```yaml

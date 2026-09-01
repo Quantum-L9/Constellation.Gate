@@ -18,7 +18,12 @@ class NeverDispatch:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def dispatch(self, _packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        _packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         self.calls += 1
         raise AssertionError("dispatcher should not be called for workflow action")
 
@@ -30,7 +35,12 @@ class WorkflowEngineStub:
     def has_workflow(self, action: str) -> bool:
         return action == "full_pipeline"
 
-    async def execute(self, packet: TransportPacket) -> TransportPacket:
+    async def execute(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         self.calls += 1
         return packet.derive(
             packet_type="response",

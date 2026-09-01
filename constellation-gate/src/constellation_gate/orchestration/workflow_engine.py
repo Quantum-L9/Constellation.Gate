@@ -7,6 +7,7 @@ from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 from constellation_gate.orchestration.condition_eval import SafeConditionEvaluator
 from constellation_gate.orchestration.workflow_models import WorkflowDefinition, WorkflowStep
+from constellation_gate.resilience.deadline import PacketDeadline
 from constellation_gate.routing.dispatch import Dispatcher
 from constellation_gate.routing.node_registry import NodeRegistry
 
@@ -69,7 +70,19 @@ class WorkflowEngine:
     def has_workflow(self, name: str) -> bool:
         return name.strip().lower() in self._definitions
 
-    async def execute(self, packet: TransportPacket) -> TransportPacket:
+    async def execute(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: PacketDeadline | None = None,
+    ) -> TransportPacket:
+        """Run a composite workflow.
+
+        Every step goes through the same Gate-owned dispatcher and consumes the
+        SAME packet deadline. A workflow must not be able to buy itself a fresh
+        budget per step: N steps under one 30s packet budget is 30s total, not
+        N x 30s.
+        """
         workflow_name = packet.header.action.strip().lower()
         if workflow_name not in self._definitions:
             raise LookupError(f"no workflow defined for action: {workflow_name}")
@@ -101,14 +114,14 @@ class WorkflowEngine:
                     resolved_by_gate=False,
                     original_source_node=packet.address.source_node,
                 ),
-                timeout_ms=(
-                    step.timeout_ms
-                    if step.timeout_ms is not None
-                    else current_packet.header.timeout_ms
+                timeout_ms=self._step_timeout_ms(
+                    step_timeout_ms=step.timeout_ms,
+                    packet_timeout_ms=current_packet.header.timeout_ms,
+                    deadline=deadline,
                 ),
             )
 
-            step_response = await self._dispatcher.dispatch(step_packet)
+            step_response = await self._dispatcher.dispatch(step_packet, deadline=deadline)
             latest_response_payload = dict(step_response.payload)
             current_payload = self._merge_payload(
                 step=step,
@@ -130,6 +143,27 @@ class WorkflowEngine:
                 original_source_node=packet.address.source_node,
             ),
         )
+
+    @staticmethod
+    def _step_timeout_ms(
+        *,
+        step_timeout_ms: int | None,
+        packet_timeout_ms: int | None,
+        deadline: PacketDeadline | None,
+    ) -> int | None:
+        """Clamp a step's declared timeout to the packet's remaining budget.
+
+        A step config may declare a generous per-step timeout; it may not use it
+        to outlive the packet that authorized the work.
+        """
+        declared = step_timeout_ms if step_timeout_ms is not None else packet_timeout_ms
+        if deadline is None:
+            return declared
+        remaining_ms = int(deadline.remaining_or_raise() * 1000)
+        remaining_ms = max(1, remaining_ms)
+        if declared is None:
+            return remaining_ms
+        return min(declared, remaining_ms)
 
     def _should_execute_step(
         self,

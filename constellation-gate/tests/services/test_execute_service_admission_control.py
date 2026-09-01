@@ -19,7 +19,12 @@ class SequenceValidator:
 
 
 class EchoDispatcher:
-    async def dispatch(self, packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         return packet.derive(
             packet_type="response",
             source_node="gate",
@@ -30,7 +35,12 @@ class EchoDispatcher:
 
 
 class FailingDispatcher:
-    async def dispatch(self, _packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        _packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         raise RuntimeError("worker failure")
 
 

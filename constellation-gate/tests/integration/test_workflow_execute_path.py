@@ -20,7 +20,12 @@ class NeverDispatch:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def dispatch(self, _packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        _packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         self.calls += 1
         raise AssertionError("workflow path should use workflow engine-owned dispatcher calls only")
 
@@ -29,7 +34,12 @@ class WorkflowDispatcher:
     def __init__(self) -> None:
         self.calls: list[TransportPacket] = []
 
-    async def dispatch(self, packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         self.calls.append(packet)
         if packet.header.action == "enrich":
             return packet.derive(

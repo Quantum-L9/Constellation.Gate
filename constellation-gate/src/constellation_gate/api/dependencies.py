@@ -71,12 +71,30 @@ def get_ingress_validator() -> IngressValidator:
     )
 
 
+def _pooled_client() -> Any:
+    """Resolve the shared pooled client, or None before/after ASGI startup.
+
+    Returning None (rather than raising) keeps non-ASGI callers -- scripts,
+    unit tests -- on the per-call client path instead of failing on wiring.
+    """
+    manager = get_http_client_manager()
+    if not manager.started:
+        return None
+    return manager.client
+
+
 @lru_cache
 def get_dispatcher() -> Dispatcher:
     settings = get_gate_settings()
     return Dispatcher(
         local_node=settings.local_node,
         registry=get_registry(),
+        # Without these two the pooled connection manager and the per-node
+        # concurrency limiter were constructed at startup and then never
+        # consulted: every dispatch opened its own client and the per-node
+        # admission gate never ran.
+        client_provider=_pooled_client,
+        node_limits=get_node_limiter_manager(),
     )
 
 

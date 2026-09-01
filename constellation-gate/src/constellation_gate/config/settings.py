@@ -4,9 +4,13 @@ import json
 import os
 from functools import lru_cache
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _ALLOWED_ENVIRONMENTS = {"local", "dev", "test", "staging", "prod"}
+
+# Environments where Gate is reachable by something other than a developer's
+# laptop. In these, an unauthenticated ingress is a NO_GO, not a default.
+_TRUSTED_INGRESS_REQUIRED_ENVIRONMENTS = frozenset({"staging", "prod"})
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -84,6 +88,16 @@ class GateSettings(BaseModel):
     verify_hop_signatures: bool = False
     admin_token: str | None = None
 
+    # Actions this deployment must be able to route before it is considered
+    # ready. Empty = no declared routing requirement.
+    required_ready_actions: tuple[str, ...] = ()
+
+    # Explicit operator assertion that ingress is fronted by an authenticated
+    # network boundary (service mesh mTLS / private ingress). This does not relax
+    # packet validation; it only records which trust mechanism is authoritative
+    # so a deployed environment cannot end up with neither.
+    trusted_network_ingress: bool = False
+
     # BROKEN-001: path to workflow definitions YAML file; empty/unset = workflows disabled
     workflow_config_path: str | None = None
 
@@ -127,6 +141,7 @@ class GateSettings(BaseModel):
         "allowed_actions",
         "allowed_packet_types",
         "required_idempotency_actions",
+        "required_ready_actions",
         "attachment_allowed_schemes",
     )
     @classmethod
@@ -147,6 +162,52 @@ class GateSettings(BaseModel):
                 raise ValueError("verifying_keys must not contain blank keys or values")
             normalized[rendered_key] = rendered_value
         return normalized
+
+    @model_validator(mode="after")
+    def enforce_production_ingress_trust(self) -> GateSettings:
+        """Fail closed when a deployed environment has no ingress trust boundary.
+
+        Gate's ingress accepts a canonical TransportPacket over HTTP. The packet
+        model proves internal integrity (payload_hash / transport_hash) but a
+        hash any caller can recompute is not authentication -- it says the packet
+        is well-formed, not that it came from someone entitled to route work.
+
+        Signature verification is the only trust boundary this repository can
+        actually enforce. If an operator asserts that an authenticated network
+        boundary (mesh mTLS, private ingress) is the real control, that is a
+        deliberate, named decision -- so it must be stated explicitly via
+        L9_TRUSTED_NETWORK_INGRESS rather than obtained by leaving a default at
+        false. Silent unauthenticated production ingress is what this rejects.
+        """
+        if self.environment not in _TRUSTED_INGRESS_REQUIRED_ENVIRONMENTS:
+            return self
+
+        if self.dev_mode:
+            raise ValueError(
+                f"dev_mode must be disabled in environment {self.environment!r} "
+                "(set L9_DEV_MODE=false)"
+            )
+
+        if self.trusted_network_ingress:
+            # Operator has asserted an external authenticated boundary. Packet
+            # validation stays on as defense in depth; nothing is relaxed here.
+            return self
+
+        if not self.require_signature:
+            raise ValueError(
+                f"environment {self.environment!r} requires an ingress trust boundary: "
+                "set L9_REQUIRE_SIGNATURE=true (with L9_VERIFYING_KEYS_JSON), or assert "
+                "an authenticated network boundary with L9_TRUSTED_NETWORK_INGRESS=true"
+            )
+
+        if not self.verifying_keys and self.signing_key is None:
+            raise ValueError(
+                f"environment {self.environment!r} sets require_signature=true but no "
+                "verifying key material is configured; signature verification would "
+                "reject every packet. Set L9_VERIFYING_KEYS_JSON."
+            )
+
+        return self
 
     def resolve_verifying_key(self, key_id: str | None) -> str | bytes | None:
         if key_id is None:
@@ -199,6 +260,8 @@ def get_settings() -> GateSettings:
         replay_enabled=_env_bool("L9_REPLAY_ENABLED", True),
         verify_hop_signatures=_env_bool("L9_VERIFY_HOP_SIGNATURES", False),
         admin_token=admin_token,
+        required_ready_actions=_env_tuple("L9_REQUIRED_READY_ACTIONS"),
+        trusted_network_ingress=_env_bool("L9_TRUSTED_NETWORK_INGRESS", False),
         # BROKEN-001: optional workflow YAML path; None = workflows disabled
         workflow_config_path=os.getenv("GATE_WORKFLOW_CONFIG_PATH") or None,
     )

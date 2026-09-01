@@ -14,7 +14,7 @@ class DummyValidator:
 
 
 class DummyDispatcher:
-    async def dispatch(self, packet):
+    async def dispatch(self, packet, *, deadline: object | None = None):
         return packet
 
 

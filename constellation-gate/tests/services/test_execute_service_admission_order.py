@@ -16,7 +16,12 @@ class StaticValidator:
 
 
 class EchoDispatcher:
-    async def dispatch(self, packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         return packet.derive(
             packet_type="response",
             source_node="gate",

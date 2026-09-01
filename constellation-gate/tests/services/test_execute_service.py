@@ -20,7 +20,12 @@ class FakeDispatcher:
         self.response_packet = response_packet
         self.calls: list[TransportPacket] = []
 
-    async def dispatch(self, packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         self.calls.append(packet)
         return self.response_packet
 
@@ -34,7 +39,12 @@ class FakeWorkflowEngine:
     def has_workflow(self, name: str) -> bool:
         return self._has_workflow
 
-    async def execute(self, packet: TransportPacket) -> TransportPacket:
+    async def execute(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         self.calls.append(packet)
         return self._response_packet
 

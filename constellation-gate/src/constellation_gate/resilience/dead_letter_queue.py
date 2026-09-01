@@ -22,13 +22,21 @@ class DeadLetterEntry:
 @dataclass
 class DeadLetterQueue:
     """
-    In-memory dead letter queue for failed packets.
+    Process-local, in-memory record of terminally failed packets.
 
-    This is intentionally simple and process-local. It preserves a stable
-    quarantine contract that can later be externalized to durable storage.
+    OBSERVABILITY ONLY. This is NOT a recovery mechanism and must not be
+    described as one: entries live in this process's heap, are lost on restart,
+    are invisible to every other Gate replica, are never re-driven, and are
+    bounded only by ``max_entries``. A packet reaching this queue has failed and
+    stays failed -- the queue records that it happened.
+
+    It exists to keep a stable quarantine shape that a durable backend can later
+    implement (see docs/repo-readiness-summary.md, "Dead-letter externalization").
+    Until then, do not build an operational recovery procedure on it.
     """
 
     entries: list[DeadLetterEntry] = field(default_factory=list)
+    max_entries: int = 1_000
 
     def put(self, *, packet: TransportPacket, error: Exception) -> DeadLetterEntry:
         entry = DeadLetterEntry(
@@ -42,6 +50,10 @@ class DeadLetterQueue:
             packet=packet.model_dump_json_dict(),
         )
         self.entries.append(entry)
+        # A sustained outage is precisely when this fills fastest, and each
+        # entry holds a full packet dump. Drop oldest rather than grow forever.
+        while len(self.entries) > self.max_entries:
+            self.entries.pop(0)
         return entry
 
     def size(self) -> int:

@@ -11,6 +11,7 @@ from constellation_gate.api import dependencies as deps
 from constellation_gate.api.errors import to_http_exception
 from constellation_gate.runtime.app_state import AppState
 from constellation_gate.runtime.metrics_endpoint import router as metrics_router
+from constellation_gate.runtime.readiness import readiness_report
 from constellation_gate.schemas.registry import RegisterNodesRequest
 from constellation_gate.services.capability_service import CapabilityAuthorizationError
 
@@ -45,6 +46,24 @@ def create_app() -> FastAPI:
             "node_name": settings.local_node,
             "environment": settings.environment,
         }
+
+    @app.get("/v1/ready")
+    async def ready(response: Response) -> dict[str, Any]:
+        """Routability probe.
+
+        Distinct from /v1/health, which stays a pure liveness signal. This
+        answers whether Gate can actually route the actions this deployment
+        declared it must serve, and returns 503 when it cannot -- so a canary
+        fails on an un-routable Gate instead of on the first real request.
+        """
+        settings = deps.get_gate_settings()
+        report = readiness_report(
+            deps.get_registry(),
+            required_actions=settings.required_ready_actions,
+        )
+        if not report["ready"]:
+            response.status_code = 503
+        return report
 
     @app.post("/v1/execute")
     async def execute(request: Request) -> JSONResponse:

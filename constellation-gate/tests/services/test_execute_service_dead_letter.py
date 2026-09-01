@@ -15,7 +15,12 @@ class StaticValidator:
 
 
 class AlwaysFailDispatcher:
-    async def dispatch(self, _packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        _packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         raise RuntimeError("dispatch failed")
 
 

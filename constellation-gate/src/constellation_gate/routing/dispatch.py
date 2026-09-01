@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
 
 import httpx
 from constellation_node_sdk.transport.hop_trace import make_dispatch_hop, make_ingress_hop
@@ -8,8 +8,14 @@ from constellation_node_sdk.transport.packet import TransportPacket
 from constellation_node_sdk.transport.provenance import RoutingProvenance
 
 from constellation_gate.boundary.routing_policy import validate_gate_dispatch_policy
+from constellation_gate.resilience.deadline import PacketDeadline
 from constellation_gate.routing.node_registry import NodeRegistry
 from constellation_gate.routing.resolver import RouteResolver
+from constellation_gate.routing.worker_transport import (
+    WorkerTransportError,
+    WorkerUnreachableError,
+    post_worker_packet,
+)
 from constellation_gate.runtime.node_limits import PerNodeLimiterManager
 
 
@@ -17,7 +23,10 @@ class Dispatcher:
     """
     Gate-owned internal dispatcher.
 
-    Only Gate may derive direct worker-targeted dispatch packets.
+    Only Gate may derive direct worker-targeted dispatch packets. This class owns
+    the routing decision (resolve, derive, authorize); the transport mechanics
+    live behind ``routing.worker_transport``, which is the single Gate->worker
+    packet-transport seam.
     """
 
     def __init__(
@@ -26,15 +35,26 @@ class Dispatcher:
         local_node: str,
         registry: NodeRegistry,
         client: httpx.AsyncClient | None = None,
+        client_provider: Callable[[], httpx.AsyncClient | None] | None = None,
         node_limits: PerNodeLimiterManager | None = None,
     ) -> None:
         self._local_node = local_node.strip().lower()
         self._registry = registry
         self._resolver = RouteResolver(registry, local_node=self._local_node)
         self._client = client
+        # The pooled client only exists after ASGI startup, while the dispatcher
+        # is constructed during wiring. A provider defers resolution to dispatch
+        # time so the shared connection pool is actually used in the app, instead
+        # of every dispatch opening and discarding its own client.
+        self._client_provider = client_provider
         self._node_limits = node_limits
 
-    async def dispatch(self, packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: PacketDeadline | None = None,
+    ) -> TransportPacket:
         target = self._resolver.resolve(packet)
 
         ingress_observed = packet.with_hop(
@@ -76,6 +96,8 @@ class Dispatcher:
 
         validate_gate_dispatch_policy(dispatch_packet, local_node=self._local_node)
 
+        timeout_seconds = self._resolve_transport_budget(target.timeout_ms, deadline)
+
         # Acquire the per-node concurrency permit (the authoritative admission
         # gate) before touching the registry's active counter, and only release
         # what this call actually acquired so a rejected dispatch cannot free an
@@ -92,14 +114,20 @@ class Dispatcher:
             incremented = True
 
             try:
-                response = await self._post_dispatch_packet(
-                    url=f"{target.internal_url}/v1/execute",
-                    timeout_ms=target.timeout_ms,
+                response = await post_worker_packet(
                     packet=dispatch_packet,
+                    url=f"{target.internal_url}/v1/execute",
+                    timeout_seconds=timeout_seconds,
+                    node_name=target.node_name,
+                    client=self._resolve_client(),
                 )
-            except httpx.TransportError as exc:
+            except WorkerUnreachableError:
                 self._registry.mark_unhealthy(target.node_name)
-                raise RuntimeError(f"dispatch transport error to {target.node_name!r}") from exc
+                raise
+            except WorkerTransportError:
+                # A timeout or a bad response is not evidence the node is down;
+                # only an unreachable node is. Preserve the typed cause chain.
+                raise
             return TransportPacket.model_validate(response)
         finally:
             if incremented:
@@ -107,34 +135,24 @@ class Dispatcher:
             if acquired_limit and self._node_limits is not None:
                 self._node_limits.release(target.node_name)
 
-    async def _post_dispatch_packet(
-        self,
-        *,
-        url: str,
-        timeout_ms: int,
-        packet: TransportPacket,
-    ) -> dict[str, Any]:
+    def _resolve_client(self) -> httpx.AsyncClient | None:
         if self._client is not None:
-            response = await self._client.post(
-                url,
-                json=packet.model_dump_json_dict(),
-                headers={"Content-Type": "application/json"},
-                timeout=timeout_ms / 1000,
-            )
-            response.raise_for_status()
-            body = response.json()
-            if not isinstance(body, dict):
-                raise ValueError("dispatch response body must be a JSON object")
-            return body
+            return self._client
+        if self._client_provider is None:
+            return None
+        return self._client_provider()
 
-        async with httpx.AsyncClient(timeout=timeout_ms / 1000) as client:
-            response = await client.post(
-                url,
-                json=packet.model_dump_json_dict(),
-                headers={"Content-Type": "application/json"},
-            )
-            response.raise_for_status()
-            body = response.json()
-            if not isinstance(body, dict):
-                raise ValueError("dispatch response body must be a JSON object")
-            return body
+    @staticmethod
+    def _resolve_transport_budget(
+        registered_timeout_ms: int,
+        deadline: PacketDeadline | None,
+    ) -> float:
+        """The worker gets ``min(remaining packet budget, registered node cap)``.
+
+        Without a deadline this degrades to the registered cap, which is the
+        pre-deadline behavior and is only reachable from direct unit-level use.
+        """
+        node_cap_seconds = registered_timeout_ms / 1000
+        if deadline is None:
+            return node_cap_seconds
+        return deadline.budget_for(node_cap_seconds)

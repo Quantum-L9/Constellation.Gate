@@ -20,10 +20,16 @@ from constellation_gate.observability.tracing import packet_trace
 from constellation_gate.resilience.backpressure import BackpressurePolicy
 from constellation_gate.resilience.circuit_breaker import CircuitBreaker
 from constellation_gate.resilience.dead_letter_queue import DeadLetterQueue
-from constellation_gate.resilience.idempotency import IdempotencyStore, enforce_idempotency
+from constellation_gate.resilience.deadline import PacketDeadline
+from constellation_gate.resilience.idempotency import (
+    IdempotencyStore,
+    build_idempotency_scope,
+    enforce_idempotency,
+)
 from constellation_gate.resilience.load_shedding import LoadSheddingPolicy
 from constellation_gate.resilience.rate_limiter import FixedWindowRateLimiter
 from constellation_gate.resilience.replay_guard import ReplayGuard
+from constellation_gate.resilience.replay_safety import ReplaySafetyPolicy
 from constellation_gate.resilience.retry_policy import RetryPolicy
 from constellation_gate.resilience.timeout_policy import TimeoutPolicy
 
@@ -36,13 +42,15 @@ class ExecuteService:
 
     Execution order:
     1. ingress validation
-    2. admission control (rate limit, load shedding, backpressure, circuit breaker)
-    3. idempotency lookup
-    4. replay guard
-    5. workflow or dispatch execution (with retry + timeout)
-    6. metrics/logging/tracing
-    7. idempotent result caching
-    8. dead-letter capture on terminal execution failure
+    2. one monotonic packet deadline is created (and never refreshed)
+    3. admission control (rate limit, load shedding, backpressure, circuit breaker)
+    4. idempotency lookup, namespaced by (tenant, action, key)
+    5. replay guard (window-enforcing, bounded)
+    6. workflow or dispatch execution under the deadline, replayed ONLY when the
+       action is declared replay-safe AND the packet carries a stable key
+    7. metrics/logging/tracing
+    8. idempotent result caching
+    9. dead-letter capture on terminal execution failure
     """
 
     def __init__(
@@ -62,8 +70,14 @@ class ExecuteService:
 
         self.idempotency_store = IdempotencyStore()
         self.replay_guard = ReplayGuard()
-        self.retry_policy = RetryPolicy()
         self.timeout_policy = TimeoutPolicy()
+
+        # Retry is a mechanism the service may invoke, not a wrapper it applies
+        # by default. `replay_safety` decides per packet whether the attempt
+        # budget below is usable at all; with the default empty policy every
+        # action runs exactly once. Operators opt an action in explicitly.
+        self.retry_policy = RetryPolicy()
+        self.replay_safety = ReplaySafetyPolicy()
 
         # Admission-control primitives default to effectively-unlimited so the
         # standard execution path is unchanged until an operator (or test) tunes
@@ -88,6 +102,11 @@ class ExecuteService:
         try:
             packet = self._validate(body)
             action_for_metrics = packet.header.action
+
+            # The one monotonic budget for this operation. Created here, once,
+            # immediately after ingress validation; every downstream stage
+            # consumes what is left of it and nothing refreshes it.
+            deadline = PacketDeadline(self.timeout_policy.resolve(packet))
 
             log_packet_event(
                 logger,
@@ -127,19 +146,30 @@ class ExecuteService:
 
             async def _run() -> TransportPacket:
                 if self.workflow_engine.has_workflow(validated_packet.header.action):
-                    result = await self.workflow_engine.execute(validated_packet)
+                    result = await self.workflow_engine.execute(
+                        validated_packet, deadline=deadline
+                    )
                 else:
-                    result = await self.dispatcher.dispatch(validated_packet)
+                    result = await self.dispatcher.dispatch(validated_packet, deadline=deadline)
                 if not isinstance(result, TransportPacket):
                     raise TypeError("execution path must return TransportPacket")
                 return result
 
-            timeout_seconds = self.timeout_policy.resolve(packet)
+            # A whole-operation replay needs BOTH an explicit replay-safety
+            # contract for the action AND a stable idempotency key. Absent
+            # either, attempts == 1: a worker timeout means "no answer", not
+            # "no work happened", and re-running blind would duplicate side
+            # effects the router cannot see.
+            attempts = self.replay_safety.attempts_for(
+                packet, max_attempts=self.retry_policy.max_attempts
+            )
 
             try:
                 result = await asyncio.wait_for(
-                    self.retry_policy.run(_run),
-                    timeout=timeout_seconds,
+                    self.retry_policy.run(_run, max_attempts=attempts, deadline=deadline),
+                    # Outer guard only. The authoritative bound is the deadline
+                    # itself, which reaches the real worker network timeout.
+                    timeout=deadline.remaining_or_raise(),
                 )
             except Exception as exc:
                 self.circuit_breaker.record_failure()
@@ -148,9 +178,10 @@ class ExecuteService:
 
             self.circuit_breaker.record_success()
 
-            if packet.header.idempotency_key is not None:
+            idempotency_scope = build_idempotency_scope(packet)
+            if idempotency_scope is not None:
                 self.idempotency_store.set(
-                    packet.header.idempotency_key,
+                    idempotency_scope,
                     result.model_dump_json_dict(),
                 )
 
