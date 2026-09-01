@@ -17,3 +17,8 @@
 # A repo that later wants its own tracked Claude config can un-ignore the
 # specific paths it owns.
 /.claude/
+
+# Org CI provisions the immutable SDK and governance bundle here before
+# `l9-ci semgrep run --root .`. Leave it untracked so the scanner does not
+# treat vendor runtime as this repository's findings.
+/.l9/runtime/

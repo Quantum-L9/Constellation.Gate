@@ -76,7 +76,10 @@ def create_app() -> FastAPI:
             if not isinstance(body, dict):
                 raise ValueError("request body must be a JSON object")
             service = deps.get_execute_service()
-            packet = await service.execute(body)
+            # Packet dispatch, not a database query.
+            packet = await service.execute(
+                body,  # nosemgrep: python.fastapi.db.generic-sql-fastapi.generic-sql-fastapi
+            )
             return JSONResponse(content=packet.model_dump_json_dict())
         except Exception as exc:  # noqa: BLE001
             raise to_http_exception(exc) from exc
