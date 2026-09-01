@@ -118,7 +118,12 @@ What was done instead of a cosmetic refactor:
   canonical packet — verified by planting a probe module, watching the guard
   fail, and removing it;
 - the guard's allow-list is a ratchet asserted to be exactly
-  `{routing/dispatch.py}`, so it can shrink but not silently grow;
+  `{routing/worker_transport.py}`, so it can shrink but not silently grow. The
+  mechanics moved out of `routing/dispatch.py` into a dedicated seam so the
+  routing decision (*where*) and the transport (*how*) are separable and the
+  pending SDK migration is a one-function swap; the allow-list moved with them,
+  same size, and gained assertions that the dispatcher cannot reacquire HTTP,
+  status mapping, or response decoding;
 - the guard distinguishes Gate's own **inbound** `@app.post("/v1/execute")` route
   from an **outbound** awaited client call (an earlier string-match version
   wrongly flagged `api/main.py`).
@@ -278,10 +283,33 @@ shipped `node_registry.yaml` contains no `eie` node and is not loaded by the
 runtime at all (registration is runtime-only, via `/v1/admin/register`). A canary
 must run the readiness check against the real registry before traffic.
 
+That check is now reachable: `GET /v1/ready` returns the report and answers 503
+while a required action is not routable. Previously `routing_readiness()`
+computed the right answer but no route exposed it, so nothing outside the process
+could ask — a canary would have discovered an un-routable Gate on its first real
+request instead of on its probe. `/v1/health` deliberately stays a pure liveness
+signal; folding routability into it would pull Gate out of rotation whenever a
+worker blips.
+
 # Workflow State
 
-Audited separately, unchanged in behaviour. Workflows share the corrected
-dispatcher, so they inherit the deadline, the attempt budget, and `route_kind`.
+Workflows share the corrected dispatcher, so they inherit the attempt budget and
+`route_kind`. They did **not** inherit the deadline, and an earlier revision of
+this document claimed they did — that claim was wrong and is corrected here.
+
+`ExecuteService` probes a collaborator's signature and passes the deadline only
+to one that declares the parameter. `WorkflowEngine.execute` did not declare it,
+so every workflow step ran with **no deadline at all**: an N-step workflow could
+consume N x the per-node timeout inside a packet budget that claimed one. This
+was invisible because sharing "the corrected dispatcher" is not the same as
+receiving the budget — the dispatcher falls back to the node cap when handed
+`deadline=None`.
+
+The engine now declares the parameter, passes one budget object to every step,
+and clamps a step's declared `timeout_ms` to what remains.
+`tests/orchestration/test_workflow_deadline.py` asserts the signature itself, so
+the probe cannot silently start missing again.
+
 The `merge_results` payload-shape assumption is recorded above as non-blocking.
 No workflow was broken to fix ordinary dispatch.
 
@@ -489,7 +517,7 @@ blocking_defects: []
 non_blocking_defects:
   - production dispatcher receives no pooled client and no per-node limiter
   - workflow merge_results assumes a response "data" key
-  - dead_letter_queue is in-memory (observability only)
+  - dead_letter_queue is in-memory and observability-only (now bounded at 1000 entries, oldest-first)
   - node_registry.yaml is stale and not loaded by the runtime
 external_blockers:
   - gate_authorized_worker_packet_transport

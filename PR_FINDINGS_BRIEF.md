@@ -40,6 +40,20 @@ VERDICT:
   merge: APPROVE
   release_set: PENDING
 
+FOLLOW-UP COMMIT (ported from a parallel implementation of the same contract):
+  - workflow deadline: WorkflowEngine.execute did not declare `deadline`, so the
+    ExecuteService signature probe skipped it and every workflow step ran with NO
+    budget. An earlier revision of FINAL_FINDINGS.md claimed workflows inherited
+    the deadline; that claim was wrong and is corrected there.
+  - GET /v1/ready: routing_readiness() was computed but unreachable — no route
+    exposed it, so a canary could not ask before sending real traffic
+  - typed worker transport errors in routing/worker_transport.py; the dispatcher
+    caught httpx.TransportError, of which httpx.TimeoutException is a SUBCLASS,
+    so one slow response marked a working worker unhealthy and ejected it
+  - worker transport failures now map to 502 (504 on timeout) instead of 500
+  - `make lint` now runs `ruff format --check`, which CI enforces and it did not
+  - dead-letter queue bounded at 1000 entries, oldest-first
+
 IMPLEMENTED:
   - route_kind="external_ingress" on Gate-authored worker packets
   - SDK pin a770e853 -> d09fe58 (derive hop reset + UTC-stable transport hash)
@@ -129,11 +143,11 @@ TEST EVIDENCE:
   - command: ruff check src tests
     result: PASS
   - command: ruff format --check src tests
-    result: PASS (164 files)
+    result: PASS (169 files)
   - command: mypy src            # strict
-    result: PASS (69 files)
+    result: PASS (70 files)
   - command: pytest -q
-    result: PASS (339 passed; baseline on main was 181)
+    result: PASS (367 passed; baseline on main was 181)
   - command: pytest tests/integration
     result: PASS (13 passed)
   - command: python -m build --wheel + install into a clean venv + import
@@ -161,7 +175,8 @@ SCOPE DRIFT:
 
 NEXT STRAIGHT_LINE_MOVE:
   Land send_gate_authored_packet in Gate_SDK (GATE_SDK_REQUIRED_DELTA.md), then
-  replace the body of Dispatcher._post_dispatch_packet and shrink
+  replace the body of routing/worker_transport.post_worker_packet and shrink
   WORKER_TRANSPORT_ADAPTER to empty. Everything Gate-side is already shaped for
-  that single substitution.
+  that single substitution: Dispatcher delegates and holds no HTTP, and the
+  drift guard asserts it cannot reacquire any.
 ```
