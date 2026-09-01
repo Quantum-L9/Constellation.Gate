@@ -14,7 +14,7 @@ install-dev:
 # reach CI, which is the class of gap a local lint target exists to prevent.
 lint:
 	ruff check src tests
-	ruff format --check src tests
+	ruff format --check src tests scripts
 
 typecheck:
 	mypy src
