@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
 from constellation_node_sdk.transport.hop_trace import make_dispatch_hop, make_ingress_hop
 from constellation_node_sdk.transport.packet import TransportPacket
@@ -11,6 +9,10 @@ from constellation_gate.boundary.routing_policy import validate_gate_dispatch_po
 from constellation_gate.resilience.deadline import Deadline
 from constellation_gate.routing.node_registry import NodeRegistry
 from constellation_gate.routing.resolver import RouteResolver
+from constellation_gate.routing.worker_transport import (
+    WorkerUnreachableError,
+    post_worker_packet,
+)
 from constellation_gate.runtime.node_limits import PerNodeLimiterManager
 
 
@@ -105,17 +107,22 @@ class Dispatcher:
             incremented = True
 
             try:
-                response = await self._post_dispatch_packet(
+                response = await post_worker_packet(
+                    packet=dispatch_packet,
                     url=f"{target.internal_url}/v1/execute",
                     timeout_seconds=self._attempt_timeout_seconds(
                         node_timeout_ms=target.timeout_ms,
                         deadline=deadline,
                     ),
-                    packet=dispatch_packet,
+                    node_name=target.node_name,
+                    client=self._client,
                 )
-            except httpx.TransportError as exc:
+            except WorkerUnreachableError:
+                # Only an unreachable node is evidence the node is down. A
+                # timeout or an unusable response is not, and marking those
+                # unhealthy would eject a slow-but-working worker from routing.
                 self._registry.mark_unhealthy(target.node_name)
-                raise RuntimeError(f"dispatch transport error to {target.node_name!r}") from exc
+                raise
             return TransportPacket.model_validate(response)
         finally:
             if incremented:
@@ -141,35 +148,3 @@ class Dispatcher:
 
         deadline.raise_if_expired(stage="worker dispatch")
         return deadline.bounded_by(node_cap_seconds)
-
-    async def _post_dispatch_packet(
-        self,
-        *,
-        url: str,
-        timeout_seconds: float,
-        packet: TransportPacket,
-    ) -> dict[str, Any]:
-        if self._client is not None:
-            response = await self._client.post(
-                url,
-                json=packet.model_dump_json_dict(),
-                headers={"Content-Type": "application/json"},
-                timeout=timeout_seconds,
-            )
-            response.raise_for_status()
-            body = response.json()
-            if not isinstance(body, dict):
-                raise ValueError("dispatch response body must be a JSON object")
-            return body
-
-        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-            response = await client.post(
-                url,
-                json=packet.model_dump_json_dict(),
-                headers={"Content-Type": "application/json"},
-            )
-            response.raise_for_status()
-            body = response.json()
-            if not isinstance(body, dict):
-                raise ValueError("dispatch response body must be a JSON object")
-            return body

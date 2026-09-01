@@ -17,7 +17,12 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "constellation_gate"
 # The single module allowed to speak HTTP to a worker today. When Gate_SDK grows
 # a Gate-authorized worker transport primitive, this adapter is what collapses
 # into that call -- and this allow-list should shrink to empty, not grow.
-WORKER_TRANSPORT_ADAPTER = {"routing/dispatch.py"}
+#
+# The mechanics moved out of routing/dispatch.py into a dedicated seam so the
+# routing decision (where) and the transport (how) are separable: dispatch.py
+# now delegates and holds no HTTP, and the SDK migration becomes a one-function
+# swap. The allow-list moved with it -- same size, not larger.
+WORKER_TRANSPORT_ADAPTER = {"routing/worker_transport.py"}
 
 # Modules legitimately holding an HTTP client for non-worker-dispatch reasons.
 HTTP_INFRASTRUCTURE = {"runtime/http_client.py", "routing/health_monitor.py"}
@@ -110,7 +115,21 @@ def test_worker_dispatch_http_stays_in_the_single_transport_adapter() -> None:
 
 def test_transport_adapter_surface_has_not_expanded() -> None:
     """The adapter list is a ratchet: it may shrink, never silently grow."""
-    assert WORKER_TRANSPORT_ADAPTER == {"routing/dispatch.py"}
+    assert WORKER_TRANSPORT_ADAPTER == {"routing/worker_transport.py"}
+
+
+def test_dispatcher_delegates_transport_and_owns_no_http() -> None:
+    """Dispatcher decides WHERE; it must not reacquire HOW."""
+    source = (SRC / "routing" / "dispatch.py").read_text(encoding="utf-8")
+    assert "post_worker_packet" in source, "dispatcher must route through the transport seam"
+    assert "raise_for_status" not in source, "HTTP status mapping belongs to the seam"
+    assert ".json()" not in source, "response decoding belongs to the seam"
+
+
+def test_transport_seam_documents_the_sdk_migration() -> None:
+    """The seam must say why it is Gate-local, so it is not mistaken for a design."""
+    source = (SRC / "routing" / "worker_transport.py").read_text(encoding="utf-8")
+    assert "GATE_SDK_REQUIRED_DELTA.md" in source
 
 
 def test_retry_policy_default_is_a_single_attempt() -> None:

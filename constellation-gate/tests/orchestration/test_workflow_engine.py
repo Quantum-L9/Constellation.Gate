@@ -11,7 +11,12 @@ class FakeDispatcher:
     def __init__(self) -> None:
         self.calls: list[TransportPacket] = []
 
-    async def dispatch(self, packet: TransportPacket) -> TransportPacket:
+    async def dispatch(
+        self,
+        packet: TransportPacket,
+        *,
+        deadline: object | None = None,
+    ) -> TransportPacket:
         self.calls.append(packet)
         if packet.header.action == "enrich":
             return packet.derive(
