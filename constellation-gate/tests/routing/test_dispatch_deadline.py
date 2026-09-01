@@ -145,8 +145,11 @@ def test_expired_deadline_refuses_to_open_a_worker_connection() -> None:
     packet = _inbound()
     clock.advance(11.0)
 
+    # The coroutine is built outside the block so the only call inside that can
+    # raise is the one being asserted about.
+    attempt = _dispatch(worker, registry, packet, deadline)
     with pytest.raises(DeadlineExceeded):
-        asyncio.run(_dispatch(worker, registry, packet, deadline))
+        asyncio.run(attempt)
 
     assert worker.request_count == 0
 
@@ -166,8 +169,9 @@ def test_a_sub_millisecond_remainder_is_reported_as_a_deadline_failure() -> None
     packet = _inbound()
     clock.advance(9.9999)
 
+    attempt = _dispatch(worker, registry, packet, deadline)
     with pytest.raises(DeadlineExceeded):
-        asyncio.run(_dispatch(worker, registry, packet, deadline))
+        asyncio.run(attempt)
 
     assert worker.request_count == 0
 
