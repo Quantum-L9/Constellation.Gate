@@ -77,8 +77,7 @@ async def test_ordinary_action_runs_exactly_once_on_timeout() -> None:
         await service.execute(_body(action="score"))
 
     assert dispatcher.attempts == 1, (
-        "a timeout-shaped exception must not, on its own, authorize a "
-        "whole-operation replay"
+        "a timeout-shaped exception must not, on its own, authorize a whole-operation replay"
     )
 
 

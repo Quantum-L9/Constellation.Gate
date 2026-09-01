@@ -10,8 +10,11 @@ install:
 install-dev:
 	$(PIP) install -e ".[dev]"
 
+# Mirrors the CI job exactly. `ruff check` alone let a format-only failure
+# reach CI, which is the class of gap a local lint target exists to prevent.
 lint:
 	ruff check src tests
+	ruff format --check src tests
 
 typecheck:
 	mypy src

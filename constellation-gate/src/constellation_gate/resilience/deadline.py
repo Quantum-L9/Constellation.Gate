@@ -103,9 +103,7 @@ class PacketDeadline:
         remaining = self.remaining_or_raise()
         if seconds >= remaining:
             await asyncio.sleep(remaining)
-            raise DeadlineExceededError(
-                "packet deadline exceeded during retry backoff"
-            )
+            raise DeadlineExceededError("packet deadline exceeded during retry backoff")
         await asyncio.sleep(seconds)
 
 

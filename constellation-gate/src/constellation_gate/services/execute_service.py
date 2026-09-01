@@ -146,9 +146,7 @@ class ExecuteService:
 
             async def _run() -> TransportPacket:
                 if self.workflow_engine.has_workflow(validated_packet.header.action):
-                    result = await self.workflow_engine.execute(
-                        validated_packet, deadline=deadline
-                    )
+                    result = await self.workflow_engine.execute(validated_packet, deadline=deadline)
                 else:
                     result = await self.dispatcher.dispatch(validated_packet, deadline=deadline)
                 if not isinstance(result, TransportPacket):

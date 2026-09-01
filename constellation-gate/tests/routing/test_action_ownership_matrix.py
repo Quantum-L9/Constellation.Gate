@@ -55,9 +55,10 @@ def test_converge_resolves_to_the_eie_owner() -> None:
     registry = NodeRegistry()
     registry.register_node(EIE_NODE_NAME, _eie())
     resolved = registry.resolve_action("converge")
-    assert owner_for_registration(
-        node_name=resolved.node_name, metadata=dict(resolved.metadata)
-    ) == "eie"
+    assert (
+        owner_for_registration(node_name=resolved.node_name, metadata=dict(resolved.metadata))
+        == "eie"
+    )
 
 
 def test_a_non_eie_node_may_not_claim_converge() -> None:

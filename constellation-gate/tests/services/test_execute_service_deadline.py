@@ -91,8 +91,7 @@ async def test_worker_transport_receives_the_remaining_budget_not_the_node_cap()
     await dispatcher.dispatch(_ingress(), deadline=deadline)
 
     assert client.timeouts == [pytest.approx(2.0)], (
-        "the worker must be granted only what the packet has left, "
-        "not a fresh full node timeout"
+        "the worker must be granted only what the packet has left, not a fresh full node timeout"
     )
 
 

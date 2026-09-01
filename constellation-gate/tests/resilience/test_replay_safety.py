@@ -35,9 +35,7 @@ def test_default_policy_declares_nothing_replay_safe() -> None:
 def test_declared_safe_action_with_key_may_replay() -> None:
     policy = ReplaySafetyPolicy(["score"])
     assert policy.may_replay(_packet(action="score", idempotency_key="k")) is True
-    assert policy.attempts_for(
-        _packet(action="score", idempotency_key="k"), max_attempts=3
-    ) == 3
+    assert policy.attempts_for(_packet(action="score", idempotency_key="k"), max_attempts=3) == 3
 
 
 def test_declared_safe_action_without_key_may_not_replay() -> None:
