@@ -379,14 +379,17 @@ None in this repository.
 
 # Remaining Non-Blocking Defects
 
-1. **Production dispatcher gets no pooled client and no per-node limiter.**
-   `dependencies.py::get_dispatcher()` constructs `Dispatcher(local_node, registry)`
-   with neither `client=` nor `node_limits=`. So `AsyncHttpClientManager` and
-   `PerNodeLimiterManager` are instantiated and tested but **dead in production**:
-   every dispatch opens and discards a fresh `httpx.AsyncClient`, and per-node
-   concurrency limits never apply. Not fixed here — wiring the runtime lifecycle
-   into DI is a distinct change with its own blast radius. **Recommend fixing
-   before load.**
+1. ~~Production dispatcher gets no pooled client and no per-node limiter.~~
+   **FIXED** in the follow-up commit. `get_dispatcher()` now passes
+   `node_limits=` and a `client_provider=`. The provider (rather than a `client=`)
+   exists because the pool is only created at ASGI startup while the dispatcher
+   is built during wiring; it resolves per dispatch and returns `None` outside a
+   lifespan, so scripts and unit tests stay on the per-call path. It is
+   deliberately not `lru_cache`d — caching would freeze the pre-startup `None`
+   and permanently defeat the pool. Pinned by
+   `tests/api/test_dispatcher_wiring.py`, including that the per-node limiter
+   (the authoritative admission gate before a worker call) is the shared
+   instance.
 2. `workflow_engine._merge_payload` reads `response.get("data")` (payload-shape
    assumption; inert by default).
 3. `DeadLetterQueue` is in-memory; observability only, not durable recovery. No

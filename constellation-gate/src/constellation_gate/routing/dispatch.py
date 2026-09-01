@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import httpx
 from constellation_node_sdk.transport.hop_trace import make_dispatch_hop, make_ingress_hop
 from constellation_node_sdk.transport.packet import TransportPacket
@@ -29,12 +31,18 @@ class Dispatcher:
         local_node: str,
         registry: NodeRegistry,
         client: httpx.AsyncClient | None = None,
+        client_provider: Callable[[], httpx.AsyncClient | None] | None = None,
         node_limits: PerNodeLimiterManager | None = None,
     ) -> None:
         self._local_node = local_node.strip().lower()
         self._registry = registry
         self._resolver = RouteResolver(registry, local_node=self._local_node)
         self._client = client
+        # The pooled client only exists after ASGI startup, while the dispatcher
+        # is built during wiring. A provider defers resolution to dispatch time
+        # so the shared connection pool is actually used, instead of every
+        # dispatch opening and discarding a client of its own.
+        self._client_provider = client_provider
         self._node_limits = node_limits
 
     async def dispatch(
@@ -115,7 +123,7 @@ class Dispatcher:
                         deadline=deadline,
                     ),
                     node_name=target.node_name,
-                    client=self._client,
+                    client=self._resolve_client(),
                 )
             except WorkerUnreachableError:
                 # Only an unreachable node is evidence the node is down. A
@@ -129,6 +137,13 @@ class Dispatcher:
                 self._registry.decrement_active(target.node_name)
             if acquired_limit and self._node_limits is not None:
                 self._node_limits.release(target.node_name)
+
+    def _resolve_client(self) -> httpx.AsyncClient | None:
+        if self._client is not None:
+            return self._client
+        if self._client_provider is None:
+            return None
+        return self._client_provider()
 
     @staticmethod
     def _attempt_timeout_seconds(

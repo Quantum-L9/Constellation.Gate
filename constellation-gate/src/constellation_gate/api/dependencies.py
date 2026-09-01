@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import httpx
 import yaml
 
 from constellation_gate.boundary.ingress_validator import IngressValidator
@@ -71,12 +72,34 @@ def get_ingress_validator() -> IngressValidator:
     )
 
 
+def _pooled_client() -> httpx.AsyncClient | None:
+    """Resolve the shared pooled client, or None outside an ASGI lifespan.
+
+    Deliberately NOT lru_cached: it is called per dispatch precisely because the
+    pool does not exist until ASGI startup. Caching it would freeze whatever the
+    first call saw -- in practice `None`, permanently defeating the pool.
+
+    Returning None rather than raising keeps non-ASGI callers -- scripts, unit
+    tests -- on the per-call client path instead of failing on wiring.
+    """
+    manager = get_http_client_manager()
+    if not manager.started:
+        return None
+    return manager.client
+
+
 @lru_cache
 def get_dispatcher() -> Dispatcher:
     settings = get_gate_settings()
     return Dispatcher(
         local_node=settings.local_node,
         registry=get_registry(),
+        # Without these two, AsyncHttpClientManager and PerNodeLimiterManager
+        # were built at startup and never consulted: every dispatch opened its
+        # own client, and the per-node concurrency limiter -- the authoritative
+        # admission gate before a worker call -- never ran at all.
+        client_provider=_pooled_client,
+        node_limits=get_node_limiter_manager(),
     )
 
 

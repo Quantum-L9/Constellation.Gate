@@ -53,6 +53,9 @@ FOLLOW-UP COMMIT (ported from a parallel implementation of the same contract):
   - worker transport failures now map to 502 (504 on timeout) instead of 500
   - `make lint` now runs `ruff format --check`, which CI enforces and it did not
   - dead-letter queue bounded at 1000 entries, oldest-first
+  - get_dispatcher() now wires the pooled client and the per-node limiter;
+    both were built at startup and never passed in, so the connection pool
+    and the authoritative per-node admission gate were dead in production
 
 IMPLEMENTED:
   - route_kind="external_ingress" on Gate-authored worker packets
@@ -80,9 +83,6 @@ BLOCKERS:
   - none in this repository
 
 NON_BLOCKING:
-  - get_dispatcher() passes neither pooled client nor per-node limiter, so
-    AsyncHttpClientManager and PerNodeLimiterManager are dead in production
-    (fresh httpx client per dispatch; per-node limits never apply)
   - workflow _merge_payload assumes a response "data" key (inert by default)
   - DeadLetterQueue is in-memory; observability only
   - node_registry.yaml is stale, has no eie, and is not loaded by the runtime
