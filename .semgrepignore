@@ -1,0 +1,7 @@
+# Semgrep scans the checkout root after Organization CI provisions the
+# immutable SDK under .l9/runtime/. That tree is not this repository's
+# source; without this exclude, p/python findings inside the vendor SDK
+# fail strict identity resolution and redden Analyze (central Core).
+.l9/runtime/
+.venv/
+artifacts/

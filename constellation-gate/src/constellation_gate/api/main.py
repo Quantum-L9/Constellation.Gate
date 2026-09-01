@@ -11,6 +11,10 @@ from constellation_gate.api import dependencies as deps
 from constellation_gate.api.errors import to_http_exception
 from constellation_gate.runtime.app_state import AppState
 from constellation_gate.runtime.metrics_endpoint import router as metrics_router
+from constellation_gate.runtime.routing_readiness import (
+    DEFAULT_REQUIRED_ACTIONS,
+    routing_readiness,
+)
 from constellation_gate.schemas.registry import RegisterNodesRequest
 from constellation_gate.services.capability_service import CapabilityAuthorizationError
 
@@ -46,6 +50,25 @@ def create_app() -> FastAPI:
             "environment": settings.environment,
         }
 
+    @app.get("/v1/ready")
+    async def ready(response: Response) -> dict[str, Any]:
+        """Routability probe -- deliberately NOT folded into /v1/health.
+
+        Operators use /v1/health as a liveness signal; widening it to include
+        downstream state would pull Gate out of rotation whenever a worker
+        blips, which is exactly backwards. routing_readiness() already computes
+        the answer from live registry state with no network I/O; without a route
+        nothing outside the process could ask it, so a canary would discover an
+        un-routable Gate on its first real request instead of on its probe.
+        """
+        report = routing_readiness(
+            deps.get_registry(),
+            required_actions=DEFAULT_REQUIRED_ACTIONS,
+        )
+        if not report["ready"]:
+            response.status_code = 503
+        return report
+
     @app.post("/v1/execute")
     async def execute(request: Request) -> JSONResponse:
         try:
@@ -53,7 +76,10 @@ def create_app() -> FastAPI:
             if not isinstance(body, dict):
                 raise ValueError("request body must be a JSON object")
             service = deps.get_execute_service()
-            packet = await service.execute(body)
+            # Packet dispatch, not a database query.
+            packet = await service.execute(
+                body,  # nosemgrep: python.fastapi.db.generic-sql-fastapi.generic-sql-fastapi
+            )
             return JSONResponse(content=packet.model_dump_json_dict())
         except Exception as exc:  # noqa: BLE001
             raise to_http_exception(exc) from exc

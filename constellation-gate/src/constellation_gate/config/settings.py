@@ -4,9 +4,14 @@ import json
 import os
 from functools import lru_cache
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _ALLOWED_ENVIRONMENTS = {"local", "dev", "test", "staging", "prod"}
+
+# Environments where an authoritative ingress trust boundary must be proven.
+_TRUST_REQUIRED_ENVIRONMENTS = {"staging", "prod"}
+
+_TRUST_BOUNDARY_MODES = {"signature", "network"}
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -84,6 +89,16 @@ class GateSettings(BaseModel):
     verify_hop_signatures: bool = False
     admin_token: str | None = None
 
+    # ADR-GATE-012: production ingress must have an explicitly proven trust
+    # boundary. Structural packet validity is not authentication -- anyone who
+    # can reach the port can mint a structurally valid packet.
+    #   "signature" -- verified packet signatures (require_signature + keys)
+    #   "network"   -- an approved external authenticated boundary
+    #                  (service mesh / private ingress), which must be attested
+    #                  in trusted_ingress_boundary_evidence
+    trusted_ingress_boundary: str | None = None
+    trusted_ingress_boundary_evidence: str | None = None
+
     # BROKEN-001: path to workflow definitions YAML file; empty/unset = workflows disabled
     workflow_config_path: str | None = None
 
@@ -148,6 +163,66 @@ class GateSettings(BaseModel):
             normalized[rendered_key] = rendered_value
         return normalized
 
+    @field_validator("trusted_ingress_boundary")
+    @classmethod
+    def validate_trusted_ingress_boundary(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if normalized not in _TRUST_BOUNDARY_MODES:
+            raise ValueError(
+                f"trusted_ingress_boundary must be one of {sorted(_TRUST_BOUNDARY_MODES)}"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_production_trust_boundary(self) -> GateSettings:
+        """Fail closed when a trust-requiring environment has no proven boundary.
+
+        Repository defaults are not production proof (ADR-GATE-012). A Gate whose
+        only admission test is "the bytes parse" is not authenticated, and the
+        shipped Terraform exposes the Gate port to 0.0.0.0/0 by default -- so an
+        unset boundary in staging/prod is an outage-shaped risk, not a nuance.
+        """
+        if self.environment not in _TRUST_REQUIRED_ENVIRONMENTS:
+            return self
+
+        if self.dev_mode:
+            raise ValueError(
+                f"L9_DEV_MODE must not be enabled in environment '{self.environment}': "
+                "dev mode relaxes canonical packet validation"
+            )
+
+        signature_boundary = bool(self.require_signature) and bool(self.verifying_keys)
+
+        if self.require_signature and not self.verifying_keys:
+            raise ValueError(
+                "L9_REQUIRE_SIGNATURE is enabled but L9_VERIFYING_KEYS_JSON is empty: "
+                "no key is available to verify against, so no signature can be trusted"
+            )
+
+        if signature_boundary:
+            return self
+
+        if self.trusted_ingress_boundary == "network":
+            if not self.trusted_ingress_boundary_evidence:
+                raise ValueError(
+                    "trusted_ingress_boundary='network' requires "
+                    "L9_TRUSTED_INGRESS_BOUNDARY_EVIDENCE naming the enforcing "
+                    "mechanism (service mesh, private ingress, authenticating proxy)"
+                )
+            return self
+
+        raise ValueError(
+            f"environment '{self.environment}' has no proven ingress trust boundary. "
+            "Set L9_REQUIRE_SIGNATURE=true with L9_VERIFYING_KEYS_JSON, or declare "
+            "L9_TRUSTED_INGRESS_BOUNDARY=network with "
+            "L9_TRUSTED_INGRESS_BOUNDARY_EVIDENCE describing the external "
+            "authenticated boundary. Structural packet validity is not authentication."
+        )
+
     def resolve_verifying_key(self, key_id: str | None) -> str | bytes | None:
         if key_id is None:
             return None
@@ -201,4 +276,9 @@ def get_settings() -> GateSettings:
         admin_token=admin_token,
         # BROKEN-001: optional workflow YAML path; None = workflows disabled
         workflow_config_path=os.getenv("GATE_WORKFLOW_CONFIG_PATH") or None,
+        # ADR-GATE-012: explicit production ingress trust boundary declaration.
+        trusted_ingress_boundary=os.getenv("L9_TRUSTED_INGRESS_BOUNDARY") or None,
+        trusted_ingress_boundary_evidence=(
+            os.getenv("L9_TRUSTED_INGRESS_BOUNDARY_EVIDENCE") or None
+        ),
     )

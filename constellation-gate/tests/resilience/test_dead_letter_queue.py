@@ -46,3 +46,27 @@ def test_dead_letter_queue_latest_and_clear() -> None:
     dlq.clear()
     assert dlq.size() == 0
     assert dlq.latest() is None
+
+
+def test_dead_letter_queue_is_bounded() -> None:
+    """A sustained outage must not turn the DLQ into a memory leak."""
+    from constellation_node_sdk.transport.packet import create_transport_packet
+
+    from constellation_gate.resilience.dead_letter_queue import DeadLetterQueue
+
+    queue = DeadLetterQueue(max_entries=10)
+    for i in range(50):
+        packet = create_transport_packet(
+            action="score",
+            payload={"n": i},
+            tenant="tenant-a",
+            destination_node="gate",
+            source_node="client",
+            reply_to="client",
+        )
+        queue.put(packet=packet, error=RuntimeError(f"failure {i}"))
+
+    assert queue.size() == 10
+    latest = queue.latest()
+    assert latest is not None
+    assert latest.error_message == "failure 49"

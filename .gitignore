@@ -6,3 +6,19 @@
 # Local Cursor / Suite 6 (templates from GlobalCommands; do not commit)
 .cursorrules
 .suite6-config.json
+
+# Agent session bootstrap — materialised into the checkout by the L9 sessionStart
+# reconciler, not repository content. `.claude/rules` is a symlink into the
+# governance clone (an absolute machine path) and `.claude/skills` is a
+# projection of the governance skill library, so committing either would
+# hardcode a machine path and duplicate the governance SSOT. This repository
+# tracks no .claude files of its own; the tree is regenerated each session.
+# Matches the convention in l9-repo-template and Enrichment.Inference.Engine.
+# A repo that later wants its own tracked Claude config can un-ignore the
+# specific paths it owns.
+/.claude/
+
+# Org CI provisions the immutable SDK and governance bundle here before
+# `l9-ci semgrep run --root .`. Leave it untracked so the scanner does not
+# treat vendor runtime as this repository's findings.
+/.l9/runtime/
