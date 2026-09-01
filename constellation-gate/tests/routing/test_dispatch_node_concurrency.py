@@ -1,40 +1,40 @@
+"""The per-node concurrency limit is the authoritative admission gate.
+
+The worker here is the real SDK runtime (``tests/support/sdk_worker``) held
+mid-call, rather than a fake client: the point of the test is that a SECOND
+dispatch is refused while a FIRST is genuinely in flight, and only a worker that
+is really occupied demonstrates that.
+"""
+
 from __future__ import annotations
 
 import asyncio
 
-import httpx
 import pytest
 from constellation_node_sdk.transport.packet import create_transport_packet
 from constellation_node_sdk.transport.provenance import RoutingProvenance
+from support.sdk_worker import SdkWorker
 
 from constellation_gate.routing.dispatch import Dispatcher
 from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
 from constellation_gate.runtime.node_limits import NodeLimitExceededError, PerNodeLimiterManager
 
 
-class BlockingClient:
-    def __init__(self) -> None:
-        self.entered = asyncio.Event()
-        self.release = asyncio.Event()
-
-    async def post(self, url: str, json: dict, headers: dict, timeout: float) -> httpx.Response:
-        del url, headers, timeout
-        self.entered.set()
-        await self.release.wait()
-        request = httpx.Request("POST", "http://score:8000/v1/execute")
-        response_packet = create_transport_packet(
-            action="score",
-            payload={"status": "completed"},
-            tenant="tenant-a",
-            destination_node="gate",
-            source_node="score",
-            reply_to="gate",
-        )
-        return httpx.Response(
-            status_code=200,
-            json=response_packet.model_dump_json_dict(),
-            request=request,
-        )
+def _packet(entity_id: str):
+    return create_transport_packet(
+        action="score",
+        payload={"entity_id": entity_id},
+        tenant="tenant-a",
+        destination_node="gate",
+        source_node="orchestrator",
+        reply_to="orchestrator",
+        provenance=RoutingProvenance(
+            origin_kind="node",
+            requested_action="score",
+            resolved_by_gate=False,
+            original_source_node="orchestrator",
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -51,50 +51,25 @@ async def test_dispatch_enforces_per_node_concurrency_limit() -> None:
         ),
     )
 
+    worker = SdkWorker(node_name="score", action="score", blocking=True)
     node_limits = PerNodeLimiterManager()
-    client = BlockingClient()
-    dispatcher = Dispatcher(
-        local_node="gate",
-        registry=registry,
-        client=client,
-        node_limits=node_limits,
-    )
 
-    packet_a = create_transport_packet(
-        action="score",
-        payload={"entity_id": "42"},
-        tenant="tenant-a",
-        destination_node="gate",
-        source_node="orchestrator",
-        reply_to="orchestrator",
-        provenance=RoutingProvenance(
-            origin_kind="node",
-            requested_action="score",
-            resolved_by_gate=False,
-            original_source_node="orchestrator",
-        ),
-    )
-    packet_b = create_transport_packet(
-        action="score",
-        payload={"entity_id": "43"},
-        tenant="tenant-a",
-        destination_node="gate",
-        source_node="orchestrator",
-        reply_to="orchestrator",
-        provenance=RoutingProvenance(
-            origin_kind="node",
-            requested_action="score",
-            resolved_by_gate=False,
-            original_source_node="orchestrator",
-        ),
-    )
+    async with worker.client() as client:
+        dispatcher = Dispatcher(
+            local_node="gate",
+            registry=registry,
+            client=client,
+            node_limits=node_limits,
+        )
 
-    first_task = asyncio.create_task(dispatcher.dispatch(packet_a))
-    await client.entered.wait()
+        first_task = asyncio.create_task(dispatcher.dispatch(_packet("42")))
+        await worker.entered.wait()
 
-    with pytest.raises(NodeLimitExceededError):
-        await dispatcher.dispatch(packet_b)
+        with pytest.raises(NodeLimitExceededError):
+            await dispatcher.dispatch(_packet("43"))
 
-    client.release.set()
-    result = await first_task
-    assert result.payload["status"] == "completed"
+        worker.release.set()
+        result = await first_task
+
+    assert result.payload["entity_id"] == "42"
+    assert worker.request_count == 1, "the rejected dispatch must not have reached the worker"

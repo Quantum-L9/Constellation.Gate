@@ -1,29 +1,13 @@
 from __future__ import annotations
 
-import httpx
+import asyncio
+
 from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
 from constellation_node_sdk.transport.provenance import RoutingProvenance
+from support.sdk_worker import SdkWorker
 
 from constellation_gate.routing.dispatch import Dispatcher
 from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
-
-
-class FakeAsyncClient:
-    def __init__(self, response_body: dict) -> None:
-        self._response_body = response_body
-        self.calls: list[dict] = []
-
-    async def post(self, url: str, json: dict, headers: dict, timeout: float) -> httpx.Response:
-        self.calls.append(
-            {
-                "url": url,
-                "json": json,
-                "headers": headers,
-                "timeout": timeout,
-            }
-        )
-        request = httpx.Request("POST", url)
-        return httpx.Response(status_code=200, json=self._response_body, request=request)
 
 
 def test_dispatch_creates_gate_authored_worker_dispatch_and_posts_to_worker() -> None:
@@ -38,16 +22,11 @@ def test_dispatch_creates_gate_authored_worker_dispatch_and_posts_to_worker() ->
         ),
     )
 
-    response_packet = create_transport_packet(
+    worker = SdkWorker(
+        node_name="score",
         action="score",
-        payload={"status": "completed", "score": 91},
-        tenant="tenant-a",
-        destination_node="gate",
-        source_node="score",
-        reply_to="gate",
+        handler=lambda org_id, payload: {"status": "completed", "score": 91},
     )
-    fake_client = FakeAsyncClient(response_packet.model_dump_json_dict())
-    dispatcher = Dispatcher(local_node="gate", registry=registry, client=fake_client)
 
     inbound_packet = create_transport_packet(
         action="score",
@@ -64,15 +43,21 @@ def test_dispatch_creates_gate_authored_worker_dispatch_and_posts_to_worker() ->
         ),
     )
 
-    result = __import__("asyncio").run(dispatcher.dispatch(inbound_packet))
+    async def run() -> TransportPacket:
+        async with worker.client() as client:
+            dispatcher = Dispatcher(local_node="gate", registry=registry, client=client)
+            return await dispatcher.dispatch(inbound_packet)
+
+    result = asyncio.run(run())
 
     assert isinstance(result, TransportPacket)
     assert result.payload["score"] == 91
-    assert len(fake_client.calls) == 1
-    call = fake_client.calls[0]
-    assert call["url"] == "http://score:8000/v1/execute"
+    assert worker.request_count == 1
+    # The SDK owns the endpoint: Gate supplies a base URL from its registry and
+    # the canonical /v1/execute path is appended for it.
+    assert str(worker.requests[0].url) == "http://score:8000/v1/execute"
 
-    posted_packet = TransportPacket.model_validate(call["json"])
+    posted_packet = worker.received_packets[0]
     assert posted_packet.address.source_node == "gate"
     assert posted_packet.address.destination_node == "score"
     assert posted_packet.provenance.origin_kind == "gate"

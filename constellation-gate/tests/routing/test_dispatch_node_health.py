@@ -1,40 +1,38 @@
 """Only an unreachable worker is evidence that the worker is down.
 
-BEHAVIOUR CHANGE, pinned here deliberately. The previous dispatcher caught
-``httpx.TransportError`` and marked the node unhealthy. ``httpx.TimeoutException``
-is a SUBCLASS of ``httpx.TransportError``, so a worker that was merely slow got
-ejected from routing on one timeout -- and once unhealthy it stops being
-resolved, so the slowness became an outage. The typed transport errors let the
-dispatcher separate "down" from "slow", and only the first changes health.
+BEHAVIOUR PINNED DELIBERATELY. An early dispatcher caught ``httpx.TransportError``
+and marked the node unhealthy. ``httpx.TimeoutException`` is a SUBCLASS of
+``httpx.TransportError``, so a worker that was merely slow got ejected from
+routing on one timeout -- and once unhealthy it stops being resolved, so the
+slowness became an outage.
+
+The classification now belongs to Gate_SDK, which raises a distinct type per
+outcome. This module proves Gate still acts on that distinction correctly, and
+that it does so by catching a type rather than by reading a message. These cases
+also carry forward the intent of the deleted ``test_worker_transport.py``: the
+Gate-local adapter is gone, but "down vs slow vs answered badly" is still Gate's
+routing decision and is still proven here.
+
+The failures are induced through a real ``httpx.MockTransport`` rather than a
+hand-written fake client, so the SDK's own httpx handling runs for real.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
 import pytest
+from constellation_node_sdk.gate_authority import (
+    GateDispatchError,
+    WorkerConnectionError,
+    WorkerHTTPError,
+    WorkerResponseError,
+    WorkerTimeoutError,
+)
 from constellation_node_sdk.transport.packet import create_transport_packet
 
 from constellation_gate.resilience.deadline import Deadline
 from constellation_gate.routing.dispatch import Dispatcher
 from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
-from constellation_gate.routing.worker_transport import (
-    WorkerResponseError,
-    WorkerTimeoutError,
-    WorkerUnreachableError,
-)
-
-
-class FailingClient:
-    def __init__(self, exc: Exception | None = None, response: Any = None) -> None:
-        self._exc = exc
-        self._response = response
-
-    async def post(self, url: str, json: dict, headers: dict, timeout: float):
-        if self._exc is not None:
-            raise self._exc
-        return self._response
 
 
 def _registry() -> NodeRegistry:
@@ -62,16 +60,35 @@ def _packet():
     )
 
 
-async def _dispatch(registry: NodeRegistry, client: Any) -> None:
-    dispatcher = Dispatcher(local_node="gate", registry=registry, client=client)
-    await dispatcher.dispatch(_packet(), deadline=Deadline(30.0))
+def _client(handler) -> httpx.AsyncClient:
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+async def _dispatch(registry: NodeRegistry, handler) -> None:
+    async with _client(handler) as client:
+        dispatcher = Dispatcher(local_node="gate", registry=registry, client=client)
+        await dispatcher.dispatch(_packet(), deadline=Deadline(30.0))
+
+
+def _raises(exc: Exception):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise exc
+
+    return handler
+
+
+def _responds(status_code: int, body):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code=status_code, json=body, request=request)
+
+    return handler
 
 
 @pytest.mark.asyncio
 async def test_unreachable_worker_is_marked_unhealthy() -> None:
     registry = _registry()
-    with pytest.raises(WorkerUnreachableError):
-        await _dispatch(registry, FailingClient(httpx.ConnectError("refused")))
+    with pytest.raises(WorkerConnectionError):
+        await _dispatch(registry, _raises(httpx.ConnectError("refused")))
 
     assert registry.snapshot()["worker"].healthy is False
 
@@ -80,32 +97,81 @@ async def test_unreachable_worker_is_marked_unhealthy() -> None:
 async def test_a_slow_worker_is_not_marked_unhealthy() -> None:
     """A timeout says 'no answer yet', not 'this node is down'."""
     registry = _registry()
-    with pytest.raises(WorkerTimeoutError):
-        await _dispatch(registry, FailingClient(httpx.ReadTimeout("slow")))
+    with pytest.raises(WorkerTimeoutError) as info:
+        await _dispatch(registry, _raises(httpx.ReadTimeout("slow")))
 
+    assert not isinstance(info.value, WorkerConnectionError), (
+        "a timeout must stay distinguishable from an unreachable node"
+    )
     assert registry.snapshot()["worker"].healthy is True, (
         "a single slow response must not eject a working node from routing"
     )
 
 
 @pytest.mark.asyncio
-async def test_a_bad_response_does_not_mark_the_worker_unhealthy() -> None:
+async def test_an_http_error_does_not_mark_the_worker_unhealthy() -> None:
     """A 500 from the worker is an upstream bug, not an unreachable node."""
     registry = _registry()
-    request = httpx.Request("POST", "http://worker:8000/v1/execute")
-    response = httpx.Response(status_code=500, json={}, request=request)
+    with pytest.raises(WorkerHTTPError) as info:
+        await _dispatch(registry, _responds(500, {}))
 
+    assert info.value.status_code == 500
+    assert registry.snapshot()["worker"].healthy is True
+
+
+@pytest.mark.asyncio
+async def test_an_uninterpretable_body_does_not_mark_the_worker_unhealthy() -> None:
+    """A 200 carrying something that is not a canonical packet is still not 'down'."""
+    registry = _registry()
     with pytest.raises(WorkerResponseError):
-        await _dispatch(registry, FailingClient(response=response))
+        await _dispatch(registry, _responds(200, {"not": "a packet"}))
 
     assert registry.snapshot()["worker"].healthy is True
 
 
 @pytest.mark.asyncio
+async def test_every_dispatch_failure_is_a_typed_sdk_dispatch_error() -> None:
+    """Gate must never need httpx or a message substring to classify an outcome."""
+    cases = [
+        _raises(httpx.ConnectError("x")),
+        _raises(httpx.ReadTimeout("x")),
+        _responds(503, {}),
+        _responds(200, {"not": "a packet"}),
+    ]
+    for handler in cases:
+        registry = _registry()
+        with pytest.raises(GateDispatchError):
+            await _dispatch(registry, handler)
+
+
+@pytest.mark.asyncio
+async def test_a_dispatch_failure_is_attributed_to_the_resolved_node() -> None:
+    """The SDK is told a target and never resolves one, so Gate supplies the name."""
+    registry = _registry()
+    with pytest.raises(GateDispatchError) as info:
+        await _dispatch(registry, _raises(httpx.ConnectError("refused")))
+
+    assert info.value.node_name == "worker"
+
+
+@pytest.mark.asyncio
+async def test_the_underlying_cause_chain_survives_attribution() -> None:
+    """Attribution must not overwrite or suppress the SDK's own ``__cause__``."""
+    registry = _registry()
+    with pytest.raises(WorkerConnectionError) as info:
+        await _dispatch(registry, _raises(httpx.ConnectError("refused")))
+
+    assert isinstance(info.value.__cause__, httpx.ConnectError), (
+        "re-raising must preserve the httpx failure the SDK chained"
+    )
+
+
+@pytest.mark.asyncio
 async def test_the_active_counter_is_released_on_every_failure_path() -> None:
     registry = _registry()
-    for exc in (httpx.ConnectError("x"), httpx.ReadTimeout("x")):
+    for handler in (_raises(httpx.ConnectError("x")), _raises(httpx.ReadTimeout("x"))):
         registry.mark_healthy("worker")
-        with pytest.raises(Exception):  # noqa: B017 -- category asserted above
-            await _dispatch(registry, FailingClient(exc))
-        assert registry.snapshot()["worker"].active_requests == 0
+        with pytest.raises(GateDispatchError):
+            await _dispatch(registry, handler)
+
+    assert registry.snapshot()["worker"].active_requests == 0
