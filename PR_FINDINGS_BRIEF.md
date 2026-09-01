@@ -89,7 +89,12 @@ TESTS:
   - mutation: remove timeout_ms= from the child derivation
     result: 4 deadline tests FAIL (invariant is non-vacuous)
 
-REMOTE PR: NOT_CREATED
+REMOTE PR: https://github.com/Quantum-L9/Constellation.Gate/pull/14
+  base: claude/gate-routing-sdk-transport-4btf4g (STACKED on PR #13, merge bottom-up)
+  NOTE: an earlier brief recorded "the Gate functional branch has no remote PR".
+  That was wrong — PR #13 is open for 4btf4g. This branch stacks on it rather
+  than opening a sibling against main, and 6e6cc24 was merged in (both branches
+  had independently added .claude/ to .gitignore; the parent's wording was kept).
 
 STALE FINDINGS RETIRED (do not carry forward):
   - "gate_authorized_worker_packet_transport missing from Gate_SDK" — shipped

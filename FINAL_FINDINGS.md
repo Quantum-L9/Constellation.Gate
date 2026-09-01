@@ -686,7 +686,10 @@ cryptography advisory are what stand between the release set and canary.
 ```yaml
 repository: Quantum-L9/Constellation.Gate
 branch: claude/gate-sdk-transport-adoption-ay1sc4
-candidate_head: "3b5c959568e904ded02d3243d9efce24d7257e34"
+candidate_head: "b562f60"
+remote_pr: https://github.com/Quantum-L9/Constellation.Gate/pull/14
+pr_base: claude/gate-routing-sdk-transport-4btf4g
+pr_stacked_on: Quantum-L9/Constellation.Gate#13
 gate_sdk:
   pinned_sha: "bfe6642062a85a720ad8c25e96446d4df1c299ac"
   previous_sha: "d09fe58a6cd68ef8aa883896c68badc95f96e090"
@@ -762,7 +765,7 @@ validation:
   signed_round_trip: PASS
   real_eie: NOT_RUN
   deployed_gate: NOT_RUN
-  make_pr: NOT_AVAILABLE
+  make_pr: PASS (validation-only target; publish via gh api)
 blocking_defects: []
 external_release_blockers:
   - production ingress trust boundary unproven (deployment evidence required)
