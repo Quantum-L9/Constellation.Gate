@@ -6,3 +6,12 @@
 # Local Cursor / Suite 6 (templates from GlobalCommands; do not commit)
 .cursorrules
 .suite6-config.json
+
+# Claude Code / L9 governance bootstrap output.
+# The sessionStart reconciler materialises .claude/ in every workspace as
+# symlinks into the governance clone (absolute machine paths under
+# $HOME/.cursor-governance) plus generated manifests and hook shims. This
+# repository tracks no .claude files of its own and the tree is regenerated
+# each session, so it is container-local state rather than repository content.
+# Committing it would publish dangling symlinks to every other checkout.
+.claude/
