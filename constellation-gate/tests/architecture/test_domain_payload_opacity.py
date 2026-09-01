@@ -11,9 +11,9 @@ from __future__ import annotations
 import asyncio
 import copy
 
-import httpx
 from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
 from constellation_node_sdk.transport.provenance import RoutingProvenance
+from support.sdk_worker import SdkWorker
 
 from constellation_gate.routing.dispatch import Dispatcher
 from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
@@ -35,21 +35,27 @@ ADVERSARIAL_PAYLOAD = {
 }
 
 
-class CapturingClient:
-    def __init__(self, response_body: dict) -> None:
-        self._response_body = response_body
-        self.posted: list[dict] = []
-
-    async def post(self, url: str, json: dict, headers: dict, timeout: float) -> httpx.Response:
-        self.posted.append(json)
-        return httpx.Response(
-            status_code=200,
-            json=self._response_body,
-            request=httpx.Request("POST", url),
-        )
+WORKER_RESULT = {"worker_owned": {"result": "opaque-to-gate"}}
 
 
-def _dispatch_with(payload: dict) -> tuple[dict, TransportPacket]:
+def _worker_handler(org_id: str, payload: dict) -> dict:
+    """A worker that answers with its OWN vocabulary, not the caller's.
+
+    Returning something different from the request payload is what makes the
+    response-direction assertions meaningful: an echo would pass even if Gate
+    were quietly substituting the request payload for the worker's answer.
+    """
+    return WORKER_RESULT
+
+
+def _dispatch_with(payload: dict) -> tuple[TransportPacket, TransportPacket]:
+    """Dispatch through the real SDK worker; return (packet the worker got, answer).
+
+    The worker is the SDK runtime rather than a capturing fake, so the packet
+    inspected here is one that passed a real worker's ingress validation -- a
+    payload Gate had corrupted would be rejected there rather than silently
+    recorded.
+    """
     registry = NodeRegistry()
     registry.register_node(
         "eie",
@@ -61,16 +67,7 @@ def _dispatch_with(payload: dict) -> tuple[dict, TransportPacket]:
         ),
     )
 
-    response_packet = create_transport_packet(
-        action="converge",
-        payload={"worker_owned": {"result": "opaque-to-gate"}},
-        tenant="tenant-a",
-        destination_node="gate",
-        source_node="eie",
-        reply_to="gate",
-    )
-    client = CapturingClient(response_packet.model_dump_json_dict())
-    dispatcher = Dispatcher(local_node="gate", registry=registry, client=client)
+    worker = SdkWorker(node_name="eie", action="converge", handler=_worker_handler)
 
     inbound = create_transport_packet(
         action="converge",
@@ -87,22 +84,25 @@ def _dispatch_with(payload: dict) -> tuple[dict, TransportPacket]:
         ),
     )
 
-    result = asyncio.run(dispatcher.dispatch(inbound))
-    return client.posted[0], result
+    async def run() -> TransportPacket:
+        async with worker.client() as client:
+            dispatcher = Dispatcher(local_node="gate", registry=registry, client=client)
+            return await dispatcher.dispatch(inbound)
+
+    result = asyncio.run(run())
+    return worker.received_packets[0], result
 
 
 def test_worker_packet_payload_is_identical_to_ingress_payload() -> None:
     original = copy.deepcopy(ADVERSARIAL_PAYLOAD)
-    posted, _ = _dispatch_with(copy.deepcopy(ADVERSARIAL_PAYLOAD))
-
-    worker_packet = TransportPacket.model_validate(posted)
+    worker_packet, _ = _dispatch_with(copy.deepcopy(ADVERSARIAL_PAYLOAD))
 
     assert worker_packet.payload == original
 
 
 def test_no_domain_field_is_renamed_added_or_dropped() -> None:
-    posted, _ = _dispatch_with(copy.deepcopy(ADVERSARIAL_PAYLOAD))
-    worker_payload = TransportPacket.model_validate(posted).payload
+    worker_packet, _ = _dispatch_with(copy.deepcopy(ADVERSARIAL_PAYLOAD))
+    worker_payload = worker_packet.payload
 
     assert set(worker_payload) == set(ADVERSARIAL_PAYLOAD)
     # The specific translations ADR-GATE-003 forbids.
@@ -112,8 +112,8 @@ def test_no_domain_field_is_renamed_added_or_dropped() -> None:
 
 
 def test_deeply_nested_structures_survive_derivation() -> None:
-    posted, _ = _dispatch_with(copy.deepcopy(ADVERSARIAL_PAYLOAD))
-    worker_payload = TransportPacket.model_validate(posted).payload
+    worker_packet, _ = _dispatch_with(copy.deepcopy(ADVERSARIAL_PAYLOAD))
+    worker_payload = worker_packet.payload
 
     assert worker_payload["entity_snapshot"]["nested"]["deep"]["deeper"] == [None, True, 1.5]
 
@@ -128,12 +128,12 @@ def test_gate_does_not_mutate_the_callers_payload_object() -> None:
 def test_worker_response_payload_is_returned_untranslated() -> None:
     _, result = _dispatch_with(copy.deepcopy(ADVERSARIAL_PAYLOAD))
 
-    assert result.payload == {"worker_owned": {"result": "opaque-to-gate"}}
+    assert result.payload == WORKER_RESULT
 
 
 def test_payload_with_only_unknown_vocabulary_still_routes() -> None:
     """Gate must route a payload whose every key is meaningless to it."""
     alien = {"zzz": {"qqq": ["☃", {"1": 2}]}, "": None}
-    posted, _ = _dispatch_with(copy.deepcopy(alien))
+    worker_packet, _ = _dispatch_with(copy.deepcopy(alien))
 
-    assert TransportPacket.model_validate(posted).payload == alien
+    assert worker_packet.payload == alien

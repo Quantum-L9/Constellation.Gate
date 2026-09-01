@@ -1,182 +1,123 @@
-```
-CONSTELLATION.GATE PR FINDINGS BRIEF
+# CONSTELLATION.GATE SDK-ADOPTION FINDINGS BRIEF
 
-REPOSITORY:
-  name: Quantum-L9/Constellation.Gate
-  branch: claude/gate-routing-sdk-transport-4btf4g
-  candidate_head_sha: 316f6faf2c122e5032495916dc4dfe9a0461fd5c
-  code_head_validated_by_make_pr: 2f1a76487da518c0722629ccdb4f558b8573e09f  # tip adds this brief only
-  base: origin/main @ 545eda4259121dbce85c084385f68d00632981d7
+HEAD: 3b5c959568e904ded02d3243d9efce24d7257e34
+BRANCH: claude/gate-sdk-transport-adoption-ay1sc4
+BASE: origin/main @ 545eda4259121dbce85c084385f68d00632981d7
+CONTINUES: claude/gate-routing-sdk-transport-4btf4g @ 56c9cff (not origin/main —
+  that branch carried ~3,900 lines of audited work that restarting would discard)
 
-MAKE PR:
-  role: validation_gate          # lint + typecheck + test; opens no remote PR
-  result: PASS
-  failed_phase_if_any: none
-  note: >
-    The `pr` target did not exist and could not have: the Makefile carried a
-    stray markdown fence at line 33, so EVERY target failed with
-    "Makefile:33: *** missing separator. Stop." Repaired, then `pr` added.
+SDK SHA: bfe6642062a85a720ad8c25e96446d4df1c299ac
+  source: Quantum-L9/Gate_SDK PR #40 (branch claude/gate-sdk-transport-closure-u2klcf)
+  merged to SDK main: NO — the pin targets an unmerged PR head, deliberately
+  provenance: installed dist direct_url.json records that exact commit_id
 
-REMOTE PR:
-  created: false                 # not requested; no PR opened
-  number: null
-  url: null
-  base: main
-  remote_head_sha: 316f6faf2c122e5032495916dc4dfe9a0461fd5c   # pushed, matches local
+TRANSPORT:
+  worker_transport_sdk_owned: true
+  direct_httpx_remaining: none (dispatch.py imports httpx for a type only)
+  manual_response_packet_parsing: none
+  shadow_transport_allowlist: [] (empty; module deleted, absence asserted)
+  api: GateDispatchTransport.send_gate_authored_packet
+  network_attempts_per_dispatch: 1
+  pooled_client_reused: true (SDK never closes a client it did not create)
 
-VERDICT:
-  routing: GO
-  transport: BLOCKED_EXTERNAL_SDK_CAPABILITY
-  domain_opacity: GO
-  action_ownership: GO
-  retry: GO
-  deadline: GO
-  idempotency: GO
-  replay: GO
-  ingress_security: repository_default_now_fails_closed; production UNPROVEN
-  gate_sdk: pin advanced and proven
-  eie_routability: PROOF_PENDING
-  local: GO
-  merge: APPROVE
-  release_set: PENDING
+DEADLINE (INV-GATE-DOWNSTREAM-DEADLINE-IDENTITY):
+  root:   30,000 ms
+  child:   2,000 ms   (min(remaining 2s, node cap 25s))
+  socket:      2.0 s  (SDK derives it from the child's header.timeout_ms)
+  worker:      2.0 s  (runtime bounds its handler with the same field)
+  previously the child advertised 30,000 ms while Gate waited 2s
 
-FOLLOW-UP COMMIT (ported from a parallel implementation of the same contract):
-  - workflow deadline: WorkflowEngine.execute did not declare `deadline`, so the
-    ExecuteService signature probe skipped it and every workflow step ran with NO
-    budget. An earlier revision of FINAL_FINDINGS.md claimed workflows inherited
-    the deadline; that claim was wrong and is corrected there.
-  - GET /v1/ready: routing_readiness() was computed but unreachable — no route
-    exposed it, so a canary could not ask before sending real traffic
-  - typed worker transport errors in routing/worker_transport.py; the dispatcher
-    caught httpx.TransportError, of which httpx.TimeoutException is a SUBCLASS,
-    so one slow response marked a working worker unhealthy and ejected it
-  - worker transport failures now map to 502 (504 on timeout) instead of 500
-  - `make lint` now runs `ruff format --check`, which CI enforces and it did not
-  - dead-letter queue bounded at 1000 entries, oldest-first
-  - get_dispatcher() now wires the pooled client and the per-node limiter;
-    both were built at startup and never passed in, so the connection pool
-    and the authoritative per-node admission gate were dead in production
+ROUTING:
+  Gate_still_selects_worker: yes (registry, health, capacity, backpressure all Gate)
+  sdk_may_resolve_or_failover: no
+  domain_payload_opaque: yes
+  converge_owner: eie
+  converge_routable: PASS (readiness + delivery asserted against one registry)
 
-IMPLEMENTED:
-  - route_kind="external_ingress" on Gate-authored worker packets
-  - SDK pin a770e853 -> d09fe58 (derive hop reset + UTC-stable transport hash)
-  - whole-operation retry defaults to 1 attempt; replay needs explicit safety + key
-  - one monotonic packet deadline threaded into the real worker transport call
-  - idempotency namespaced by (tenant.org_id, action, key); documented non-durable
-  - replay window enforced inside check_and_record(); state bounded
-  - staging/prod fail closed without a proven ingress trust boundary
-  - runtime/routing_readiness.py: "can Gate route converge right now?"
-  - architecture drift guards over domain vocabulary and the transport seam
-  - Makefile repaired; `pr` / `pr-check` validation targets added
+SECURITY:
+  gate_authority_validation: PASS (6 negatives, each with ZERO network requests)
+  signed_round_trip: PASS (both directions, plus 4 forgery cases)
+  repository_default_fails_closed: true
+  production_trust_boundary: UNPROVEN
+  canary_safe: false
 
 PROVEN:
-  - Gate-derived packet accepted by the REAL SDK worker validators (round trip)
-  - adversarial domain payload byte-identical through ingress -> derive -> worker
-  - converge attempted exactly once even with an idempotency key
-  - transport call receives 2.0s when 28s of a 30s budget is spent (node cap 25s)
-  - cross-tenant and cross-action idempotency isolation
-  - replay: rejected at 299s, accepted at 301s; 500 packets/10s window -> <=12 kept
-  - drift guard fails on a planted offender, passes on the legitimate inbound route
-  - retry tests mutation-verified: 14 fail when the old behaviour is restored
+  - Gate decides where; Gate_SDK performs every canonical worker hop
+  - routing/worker_transport.py deleted, not deprecated; ratchet at zero
+  - one deadline across child header, socket, and worker handler
+  - exactly one network attempt; no hidden SDK retry
+  - typed SDK failures drive routing state; only WorkerConnectionError marks a
+    node unhealthy, so a slow worker is no longer ejected from routing
+  - GateDispatchAuthorityError / ConfigurationError map to 500, never 400 — both
+    subclass ValueError and would otherwise blame the caller for a Gate bug
+  - the SDK's chained httpx cause survives Gate's re-raise
+  - a node cannot buy peer transport by knowing a worker's URL
+  - payload, tenant, correlation, idempotency, and root lineage cross unchanged
+  - every dispatch test now runs against the real SDK worker runtime, not a fake
 
 BLOCKERS:
   - none in this repository
 
-NON_BLOCKING:
-  - workflow _merge_payload assumes a response "data" key (inert by default)
-  - DeadLetterQueue is in-memory; observability only
-  - node_registry.yaml is stale, has no eie, and is not loaded by the runtime
+EXTERNAL RELEASE DEBT:
+  - production ingress trust boundary unproven (needs deployment evidence)
+  - no live Odoo -> Gate -> EIE runtime proof (real_eie: NOT_RUN)
+  - Gate_SDK cryptography>=43,<45 ceiling + open dependency-audit finding;
+    explicitly NOT resolved here (not by loosening the SDK bound, changing Odoo
+    pyOpenSSL, or suppressing the finding)
+  - EIE and Odoo still pinned to older SDK commits
 
-GATE_SDK:
-  exact_sha: d09fe58a6cd68ef8aa883896c68badc95f96e090
-  previous_sha: a770e8531dc1c59ce01e1dbb0f4162785d9dda89
-  worker_transport_sdk_owned: false
-  external_capability_gap: gate_authorized_worker_packet_transport
-  anticipated_sdk_candidate: NOT_PRESENT
-  note: >
-    The expected in-flight SDK transport work has not landed: the SDK branch of
-    the same name has zero commits beyond origin/main and no findings files.
-    GateClient is node->Gate only and by contract "never accepts an arbitrary
-    peer URL", so no Gate->worker primitive exists to consume. Reported in
-    GATE_SDK_REQUIRED_DELTA.md rather than concealed behind a new Gate-local
-    transport abstraction.
-
-RETRY:
-  converge_gate_attempts: 1
-  replay_safe_actions: []        # empty by default; nothing is safe until declared
-  idempotency_required: true     # necessary but NOT sufficient
-  worker_owned_retry: [converge, graph-inference-result, match, sync, outcomes]
-
-DEADLINE:
-  one_monotonic_deadline: true
-  worker_transport_remaining_budget: true
-  clock: time.monotonic
-  note: asyncio.wait_for was NOT accepted as evidence; the timeout argument
-        handed to the transport call is asserted directly
-
-IDEMPOTENCY:
-  namespace: [tenant.org_id, canonical_action, idempotency_key]
-  durable: false
-  cross_tenant_test: PASS
-
-REPLAY:
-  window_enforced: true
-  bounded_state: true
-
-SECURITY:
-  production_trust_boundary: UNPROVEN
-  signatures_required: false by default; now REQUIRED in staging/prod unless a
-                       network boundary is explicitly attested
-  external_auth_boundary: declarable via L9_TRUSTED_INGRESS_BOUNDARY=network
-                          plus L9_TRUSTED_INGRESS_BOUNDARY_EVIDENCE
-  evidence_found: terraform allowed_cidrs defaults to ["0.0.0.0/0","::/0"] while
-                  require_signature defaulted to false and the only shipped
-                  compose sets L9_DEV_MODE=true; no staging/prod manifest exists
-
-EIE:
-  registered: NOT_RUN (no live EIE in this environment)
-  owner: eie (canonical, fail-closed)
-  converge_routable: PROOF_PENDING — proven in principle, unproven against a
-                     live registry; run routing_readiness before canary
-
-TEST EVIDENCE:
+TESTS:
   - command: ruff check src tests
     result: PASS
-  - command: ruff format --check src tests
-    result: PASS (169 files)
-  - command: mypy src            # strict
-    result: PASS (70 files)
+  - command: ruff format --check src tests scripts
+    result: PASS (175 files)
+  - command: mypy src
+    result: PASS (69 files)
   - command: pytest -q
-    result: PASS (367 passed; baseline on main was 181)
-  - command: pytest tests/integration
-    result: PASS (13 passed)
-  - command: python -m build --wheel + install into a clean venv + import
+    result: PASS — 389 passed (was 339 before this pass)
+  - command: python scripts/validate_contracts.py
     result: PASS
-  - command: python3 scripts/validate_sdk_pin.py
-    result: PASS
-  - command: PR_REMEDIATE=0 make pr
-    result: PASS
+  - command: python scripts/validate_sdk_pin.py
+    result: PASS (bfe6642…)
+  - command: make pr
+    result: PASS — validation gate only (lint + typecheck + test); this repo's
+             pr target does not push, tag, or open a pull request
+  - command: uv pip install -e ./constellation-gate[dev] (clean 3.12 venv)
+    result: PASS, direct_url.json commit_id == bfe6642…
+  - mutation: add a production module that POSTs /v1/execute and parses the reply
+    result: 2 architecture drift guards FAIL (guards are non-vacuous)
+  - mutation: remove timeout_ms= from the child derivation
+    result: 4 deadline tests FAIL (invariant is non-vacuous)
 
-REAL RUNTIME:
-  sdk_worker_round_trip: PASS    # real constellation_node_sdk worker validators
-  eie: NOT_RUN
-  deployed_gate: NOT_RUN
+REMOTE PR: https://github.com/Quantum-L9/Constellation.Gate/pull/14
+  base: claude/gate-routing-sdk-transport-4btf4g (STACKED on PR #13, merge bottom-up)
+  NOTE: an earlier brief recorded "the Gate functional branch has no remote PR".
+  That was wrong — PR #13 is open for 4btf4g. This branch stacks on it rather
+  than opening a sibling against main, and 6e6cc24 was merged in (both branches
+  had independently added .claude/ to .gitignore; the parent's wording was kept).
 
-SCOPE DRIFT:
-  three items outside the stated task list, each load-bearing:
-   1. Makefile repair — every target failed to parse, so the contract-mandated
-      `make pr` was impossible without it
-   2. route_kind + SDK pin advance — without both, Gate cannot dispatch to any
-      SDK worker at all
-   3. trust boundary fail-closed — the audit asked to prove the state; the state
-      was an internet-open port with no authentication
-  no domain translation, no direct app->worker or node->node path, no provider
-  retry logic, no EIE/Odoo domain logic, no new transport protocol
+STALE FINDINGS RETIRED (do not carry forward):
+  - "gate_authorized_worker_packet_transport missing from Gate_SDK" — shipped
+  - "worker_transport_sdk_owned: false" — now true
+  - "external_capability_gap: gate_authorized_worker_packet_transport" — null
+  - "next_move: land send_gate_authored_packet" — done and consumed
+  - Gate owns _post_dispatch_packet / post_worker_packet — module deleted
+
+NOTE ON THE SDK'S OWN VERDICT:
+  Gate_SDK PR #40 reports release_set: GO. That cannot mean the four-repository
+  production release set: at the time it was written no consumer had adopted
+  bfe6642, no real Odoo -> Gate -> EIE run had happened, and Gate's ingress trust
+  boundary was unproven. This PR closes the first of those three, for Gate only.
 
 NEXT STRAIGHT_LINE_MOVE:
-  Land send_gate_authored_packet in Gate_SDK (GATE_SDK_REQUIRED_DELTA.md), then
-  replace the body of routing/worker_transport.post_worker_packet and shrink
-  WORKER_TRANSPORT_ADAPTER to empty. Everything Gate-side is already shaped for
-  that single substitution: Dispatcher delegates and holds no HTTP, and the
-  drift guard asserts it cannot reacquire any.
-```
+  Bring EIE and Odoo onto this same SDK SHA and run the real
+  Odoo -> Gate -> EIE -> PostgreSQL -> Gate -> Odoo release-set rail.
+    EIE:  pin bfe6642, delete the bespoke Gate registration in favour of the
+          SDK's typed register_node() with metadata.owner, re-run the
+          PostgreSQL/domain gates, then a real Gate round trip. Its "SDK cannot
+          send metadata.owner" finding is stale, as is its claim that Odoo does
+          not supply domain idempotency.
+    Odoo: pin the same SDK, replace create_transport_packet + send_to_gate with
+          GateClient.execute(), drop the now-unnecessary raw httpx and legacy
+          error handling, run real Odoo 19. Its "Gate_SDK has no execute()"
+          finding is stale.

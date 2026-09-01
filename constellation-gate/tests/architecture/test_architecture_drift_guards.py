@@ -14,15 +14,12 @@ import pytest
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "constellation_gate"
 
-# The single module allowed to speak HTTP to a worker today. When Gate_SDK grows
-# a Gate-authorized worker transport primitive, this adapter is what collapses
-# into that call -- and this allow-list should shrink to empty, not grow.
-#
-# The mechanics moved out of routing/dispatch.py into a dedicated seam so the
-# routing decision (where) and the transport (how) are separable: dispatch.py
-# now delegates and holds no HTTP, and the SDK migration becomes a one-function
-# swap. The allow-list moved with it -- same size, not larger.
-WORKER_TRANSPORT_ADAPTER = {"routing/worker_transport.py"}
+# Empty, and it stays empty. Gate_SDK bfe6642 shipped the Gate-authorized worker
+# transport primitive this allow-list was waiting for, so the Gate-local adapter
+# collapsed into GateDispatchTransport.send_gate_authored_packet() and was
+# deleted. No production module may speak canonical worker HTTP again: the
+# ratchet reached zero and only shrinks.
+WORKER_TRANSPORT_ADAPTER: set[str] = set()
 
 # Modules legitimately holding an HTTP client for non-worker-dispatch reasons.
 HTTP_INFRASTRUCTURE = {"runtime/http_client.py", "routing/health_monitor.py"}
@@ -52,6 +49,29 @@ def _imports_httpx(tree: ast.AST) -> bool:
                 return True
         elif isinstance(node, ast.ImportFrom):
             if (node.module or "").split(".")[0] == "httpx":
+                return True
+    return False
+
+
+def _has_outbound_post(path: Path) -> bool:
+    """True when a module performs any outbound HTTP POST of its own.
+
+    Path-agnostic on purpose. ``_has_outbound_execute_post`` below keys on the
+    canonical ``/v1/execute`` string, which a re-implementation could simply
+    spell differently; this one cannot be dodged that way.
+    """
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    if not _imports_httpx(tree):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Await):
+            call = node.value
+            if (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and call.func.attr == "post"
+            ):
                 return True
     return False
 
@@ -113,23 +133,58 @@ def test_worker_dispatch_http_stays_in_the_single_transport_adapter() -> None:
     )
 
 
-def test_transport_adapter_surface_has_not_expanded() -> None:
-    """The adapter list is a ratchet: it may shrink, never silently grow."""
-    assert WORKER_TRANSPORT_ADAPTER == {"routing/worker_transport.py"}
+def test_transport_adapter_surface_is_empty() -> None:
+    """The adapter list is a ratchet: it reached zero and may never grow."""
+    assert WORKER_TRANSPORT_ADAPTER == set()
+
+
+def test_no_gate_local_worker_transport_module_exists() -> None:
+    """The Gate-local adapter is gone, not merely unused."""
+    assert not (SRC / "routing" / "worker_transport.py").exists(), (
+        "routing/worker_transport.py reappeared; the Gate->worker hop belongs to "
+        "GateDispatchTransport.send_gate_authored_packet()"
+    )
 
 
 def test_dispatcher_delegates_transport_and_owns_no_http() -> None:
     """Dispatcher decides WHERE; it must not reacquire HOW."""
     source = (SRC / "routing" / "dispatch.py").read_text(encoding="utf-8")
-    assert "post_worker_packet" in source, "dispatcher must route through the transport seam"
-    assert "raise_for_status" not in source, "HTTP status mapping belongs to the seam"
-    assert ".json()" not in source, "response decoding belongs to the seam"
+    assert "send_gate_authored_packet" in source, (
+        "dispatcher must route through the SDK's Gate-authorized transport"
+    )
+    assert "raise_for_status" not in source, "HTTP status mapping belongs to the SDK"
+    assert ".json()" not in source, "response decoding belongs to the SDK"
+    assert "model_validate" not in source, "response packet validation belongs to the SDK"
+    assert "client.post" not in source, "the dispatcher must perform no HTTP of its own"
 
 
-def test_transport_seam_documents_the_sdk_migration() -> None:
-    """The seam must say why it is Gate-local, so it is not mistaken for a design."""
-    source = (SRC / "routing" / "worker_transport.py").read_text(encoding="utf-8")
-    assert "GATE_SDK_REQUIRED_DELTA.md" in source
+def test_no_module_both_posts_and_revives_a_canonical_packet() -> None:
+    """Catch a worker transport re-implementation spelled at a different path.
+
+    The outbound guard keys on the literal ``/v1/execute``; a reimplementation
+    could use a different string and slip past it. The pairing cannot be dodged:
+    performing an outbound POST *and* reviving a canonical packet from a body is
+    what canonical transport IS, whatever the URL says.
+
+    Deliberately NOT a blanket ban on ``TransportPacket.model_validate``. Gate
+    legitimately revives packets it did not receive over a worker socket --
+    ``boundary/transport_codec.py`` decodes Gate's own INBOUND ingress body, and
+    ``services/execute_service.py`` revives a packet from Gate's idempotency
+    cache. Banning the call outright would flag both and teach the next reader
+    that ingress decoding is drift, which it is not.
+    """
+    offenders = []
+    for path in _production_files():
+        rel = _rel(path)
+        if rel in HTTP_INFRASTRUCTURE:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "TransportPacket.model_validate" in text and _has_outbound_post(path):
+            offenders.append(rel)
+    assert not offenders, (
+        f"{offenders} both POST and revive a canonical packet; that pairing is "
+        "worker transport, which belongs to Gate_SDK"
+    )
 
 
 def test_retry_policy_default_is_a_single_attempt() -> None:

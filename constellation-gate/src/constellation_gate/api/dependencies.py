@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 import yaml
+from constellation_node_sdk.gate_authority import GateDispatchTransportConfig
 
 from constellation_gate.boundary.ingress_validator import IngressValidator
 from constellation_gate.config.settings import GateSettings, get_settings
@@ -89,11 +90,35 @@ def _pooled_client() -> httpx.AsyncClient | None:
 
 
 @lru_cache
+def get_gate_dispatch_config() -> GateDispatchTransportConfig:
+    """Map Gate's own security posture onto the SDK dispatch transport.
+
+    Gate signs the worker leg with the same key it is known by, and verifies
+    worker responses under the same policy it applies to its own ingress. Left
+    unmapped, a Gate configured to require signatures would still dispatch
+    unsigned packets to its workers -- signed at the front door, open at the
+    back.
+    """
+    settings = get_gate_settings()
+    return GateDispatchTransportConfig(
+        local_gate_node=settings.local_node,
+        require_signature=settings.require_signature,
+        signing_key=settings.signing_key,
+        signing_key_id=settings.signing_key_id,
+        signing_algorithm=settings.signing_algorithm,
+        verify_response_signatures=settings.require_signature,
+        verifying_keys=settings.verifying_keys,
+        verify_hop_signatures=settings.verify_hop_signatures,
+    )
+
+
+@lru_cache
 def get_dispatcher() -> Dispatcher:
     settings = get_gate_settings()
     return Dispatcher(
         local_node=settings.local_node,
         registry=get_registry(),
+        dispatch_config=get_gate_dispatch_config(),
         # Without these two, AsyncHttpClientManager and PerNodeLimiterManager
         # were built at startup and never consulted: every dispatch opened its
         # own client, and the per-node concurrency limiter -- the authoritative

@@ -15,13 +15,11 @@ from __future__ import annotations
 import asyncio
 import copy
 
-import httpx
 import pytest
-from constellation_node_sdk.runtime.execution import execute_transport_packet
 from constellation_node_sdk.runtime.handlers import clear_handlers, register_handler
-from constellation_node_sdk.runtime.inbound_policy import validate_execute_ingress_packet
 from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
 from constellation_node_sdk.transport.provenance import RoutingProvenance
+from support.sdk_worker import SdkWorker
 
 from constellation_gate.boundary.ingress_validator import IngressValidator
 from constellation_gate.routing.dispatch import Dispatcher
@@ -49,34 +47,7 @@ def _clean_handlers():
     clear_handlers()
 
 
-class SdkWorkerClient:
-    """Stands in for the network only. The worker LOGIC is the real SDK runtime."""
-
-    def __init__(self) -> None:
-        self.received: list[TransportPacket] = []
-        self.ingress_errors: list[Exception] = []
-
-    async def post(self, url: str, json: dict, headers: dict, timeout: float) -> httpx.Response:
-        worker_packet = TransportPacket.model_validate(json)
-        self.received.append(worker_packet)
-
-        # Real SDK worker-side ingress policy: Gate-sourced, Gate-mediated,
-        # addressed to this node.
-        try:
-            validate_execute_ingress_packet(worker_packet, local_node="eie", gate_node_name="gate")
-        except Exception as exc:  # surfaced by the test, never swallowed
-            self.ingress_errors.append(exc)
-            raise
-
-        response_packet = await execute_transport_packet(worker_packet, node_name="eie")
-        return httpx.Response(
-            status_code=200,
-            json=response_packet.model_dump_json_dict(),
-            request=httpx.Request("POST", url),
-        )
-
-
-def _gate_stack() -> tuple[IngressValidator, Dispatcher, SdkWorkerClient]:
+def _gate_stack() -> tuple[IngressValidator, NodeRegistry, SdkWorker]:
     registry = NodeRegistry()
     registry.register_node(
         "eie",
@@ -87,12 +58,14 @@ def _gate_stack() -> tuple[IngressValidator, Dispatcher, SdkWorkerClient]:
             metadata={"owner": "eie"},
         ),
     )
-    client = SdkWorkerClient()
+    # The worker applies the SDK's real /v1/execute ingress policy and the real
+    # handler execution path; only the socket is substituted.
+    worker = SdkWorker(node_name="eie", action="converge", gate_node_name="gate")
     validator = IngressValidator(
         local_node="gate",
         known_nodes_provider=lambda: {"eie", "odoo"},
     )
-    return validator, Dispatcher(local_node="gate", registry=registry, client=client), client
+    return validator, registry, worker
 
 
 def _root_packet(*, idempotency_key: str | None = "odoo-req-1") -> TransportPacket:
@@ -115,26 +88,32 @@ def _root_packet(*, idempotency_key: str | None = "odoo-req-1") -> TransportPack
 
 
 def _run_round_trip():
-    validator, dispatcher, client = _gate_stack()
+    validator, registry, worker = _gate_stack()
 
     register_handler("converge", lambda packet: dict(WORKER_RESULT))
 
     root = _root_packet()
     validated = validator.validate(root.model_dump_json_dict())
-    result = asyncio.run(dispatcher.dispatch(validated))
-    return root, client, result
+
+    async def run() -> TransportPacket:
+        async with worker.client() as client:
+            dispatcher = Dispatcher(local_node="gate", registry=registry, client=client)
+            return await dispatcher.dispatch(validated)
+
+    result = asyncio.run(run())
+    return root, worker, result
 
 
 def test_gate_derived_packet_passes_real_sdk_worker_ingress() -> None:
-    _, client, _ = _run_round_trip()
+    _, worker, _ = _run_round_trip()
 
-    assert client.ingress_errors == []
-    assert len(client.received) == 1
+    assert worker.ingress_errors == []
+    assert len(worker.received_packets) == 1
 
 
 def test_worker_packet_lineage_and_addressing_are_canonical() -> None:
-    root, client, _ = _run_round_trip()
-    worker_packet = client.received[0]
+    root, worker, _ = _run_round_trip()
+    worker_packet = worker.received_packets[0]
 
     assert worker_packet.header.packet_id != root.header.packet_id
     assert worker_packet.lineage.parent_id == root.header.packet_id
@@ -148,16 +127,16 @@ def test_worker_packet_lineage_and_addressing_are_canonical() -> None:
 
 
 def test_tenant_context_is_preserved_across_the_hop() -> None:
-    root, client, _ = _run_round_trip()
+    root, worker, _ = _run_round_trip()
 
-    assert client.received[0].tenant == root.tenant
-    assert client.received[0].tenant.org_id == "scrapmanagement"
+    assert worker.received_packets[0].tenant == root.tenant
+    assert worker.received_packets[0].tenant.org_id == "scrapmanagement"
 
 
 def test_domain_payload_crosses_gate_unchanged() -> None:
-    _, client, _ = _run_round_trip()
+    _, worker, _ = _run_round_trip()
 
-    assert client.received[0].payload == ODOO_PAYLOAD
+    assert worker.received_packets[0].payload == ODOO_PAYLOAD
 
 
 def test_worker_response_is_validated_and_returned_untranslated() -> None:
@@ -171,10 +150,45 @@ def test_worker_response_is_validated_and_returned_untranslated() -> None:
 
 
 def test_dispatch_hop_is_recorded_against_the_derived_packet() -> None:
-    _, client, _ = _run_round_trip()
-    worker_packet = client.received[0]
+    _, worker, _ = _run_round_trip()
+    worker_packet = worker.received_packets[0]
 
     dispatch_hops = [hop for hop in worker_packet.hop_trace if hop.direction == "dispatch"]
     assert len(dispatch_hops) == 1
     assert dispatch_hops[0].target_node == "eie"
     assert dispatch_hops[0].packet_id == worker_packet.header.packet_id
+
+
+def test_converge_is_routable_to_an_eie_owned_node_and_dispatches_through_the_sdk() -> None:
+    """Readiness and dispatch are the same claim, so prove them together.
+
+    ``action_routability`` reporting converge routable is a registry-level
+    statement; it says nothing about whether a packet actually reaches the node.
+    Asserting both against one registry is what makes "converge is routable to
+    EIE" mean the thing an operator reads it as.
+
+    The worker here is an SDK-backed stand-in, NOT a live EIE process. That
+    distinction is recorded as ``real_eie: NOT_RUN`` in FINAL_FINDINGS.md rather
+    than implied by this passing.
+    """
+    from constellation_gate.runtime.routing_readiness import action_routability
+
+    validator, registry, worker = _gate_stack()
+    register_handler("converge", lambda packet: dict(WORKER_RESULT))
+
+    readiness = action_routability(registry, "converge")
+    assert readiness["routable"] is True
+    assert readiness["required_owner"] == "eie"
+
+    validated = validator.validate(_root_packet().model_dump_json_dict())
+
+    async def run() -> TransportPacket:
+        async with worker.client() as client:
+            dispatcher = Dispatcher(local_node="gate", registry=registry, client=client)
+            return await dispatcher.dispatch(validated)
+
+    result = asyncio.run(run())
+
+    assert worker.ingress_errors == []
+    assert worker.received_packets[0].address.destination_node == "eie"
+    assert result.payload == WORKER_RESULT

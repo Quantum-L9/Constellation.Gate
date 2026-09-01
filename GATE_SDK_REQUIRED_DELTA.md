@@ -1,12 +1,30 @@
 # GATE_SDK_REQUIRED_DELTA
 
-**Status:** `BLOCKED_EXTERNAL_SDK_CAPABILITY`
-**Required capability:** `gate_authorized_worker_packet_transport`
+> **STATUS: SATISFIED — 2026-09-01. This document is now a historical record.**
+>
+> The requested capability shipped in Gate_SDK
+> `bfe6642062a85a720ad8c25e96446d4df1c299ac` (PR #40) as
+> `GateDispatchTransport.send_gate_authored_packet()`, and Constellation.Gate
+> consumes it as of `3b5c959`. `routing/worker_transport.py` — the Gate-local
+> adapter this request existed to remove — is deleted, and the
+> shadow-transport allow-list is empty.
+>
+> Nothing below is an open request any more. It is retained because it records
+> *why* the Gate-local adapter existed and what was required to retire it; a
+> reader who finds a similar adapter later should be able to see how that gap
+> was closed rather than re-derive it. Do not treat any "missing", "absent", or
+> "blocked" statement in the rest of this file as current.
+>
+> Current state: `FINAL_FINDINGS.md` and `PR_FINDINGS_BRIEF.md`.
+
+**Original status:** `BLOCKED_EXTERNAL_SDK_CAPABILITY` *(superseded)*
+**Required capability:** `gate_authorized_worker_packet_transport` *(delivered)*
 **Blocked ADR:** ADR-GATE-005 (Gate_SDK owns Gate→worker transport mechanics)
 **Requesting repository:** `Quantum-L9/Constellation.Gate`
 **Target repository:** `Quantum-L9/Gate_SDK`
-**SDK state examined:** `d09fe58a6cd68ef8aa883896c68badc95f96e090` (main HEAD)
-**Date:** 2026-08-31
+**SDK state examined when written:** `d09fe58a6cd68ef8aa883896c68badc95f96e090`
+**Delivered in:** `bfe6642062a85a720ad8c25e96446d4df1c299ac`
+**Date raised:** 2026-08-31 · **Date satisfied:** 2026-09-01
 
 ---
 
