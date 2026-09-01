@@ -31,3 +31,32 @@ def test_to_http_exception_maps_permission_and_timeout_and_default() -> None:
     assert timeout.detail["code"] == "execution_timeout"
     assert unknown.status_code == 500
     assert unknown.detail["code"] == "internal_error"
+
+
+def test_worker_transport_failure_is_reported_as_a_gateway_error() -> None:
+    """An upstream worker failure must not masquerade as a Gate internal error."""
+    from constellation_gate.api.errors import to_http_exception
+    from constellation_gate.routing.worker_transport import (
+        WorkerResponseError,
+        WorkerUnreachableError,
+    )
+
+    unreachable = to_http_exception(WorkerUnreachableError("down", node_name="eie"))
+    assert unreachable.status_code == 502
+    assert unreachable.detail["code"] == "worker_transport_failed"
+    assert unreachable.detail["node"] == "eie"
+
+    bad_response = to_http_exception(
+        WorkerResponseError("HTTP 503", node_name="eie", status_code=503)
+    )
+    assert bad_response.status_code == 502
+
+
+def test_worker_timeout_is_still_a_gateway_timeout() -> None:
+    """WorkerTimeoutError is both a transport error and a TimeoutError; 504 wins."""
+    from constellation_gate.api.errors import to_http_exception
+    from constellation_gate.routing.worker_transport import WorkerTimeoutError
+
+    mapped = to_http_exception(WorkerTimeoutError("no answer", node_name="eie"))
+    assert mapped.status_code == 504
+    assert mapped.detail["code"] == "execution_timeout"
