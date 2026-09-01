@@ -7,11 +7,13 @@
 .cursorrules
 .suite6-config.json
 
-# Claude Code / L9 governance bootstrap output.
-# The sessionStart reconciler materialises .claude/ in every workspace as
-# symlinks into the governance clone (absolute machine paths under
-# $HOME/.cursor-governance) plus generated manifests and hook shims. This
-# repository tracks no .claude files of its own and the tree is regenerated
-# each session, so it is container-local state rather than repository content.
-# Committing it would publish dangling symlinks to every other checkout.
-.claude/
+# Agent session bootstrap — materialised into the checkout by the L9 sessionStart
+# reconciler, not repository content. `.claude/rules` is a symlink into the
+# governance clone (an absolute machine path) and `.claude/skills` is a
+# projection of the governance skill library, so committing either would
+# hardcode a machine path and duplicate the governance SSOT. This repository
+# tracks no .claude files of its own; the tree is regenerated each session.
+# Matches the convention in l9-repo-template and Enrichment.Inference.Engine.
+# A repo that later wants its own tracked Claude config can un-ignore the
+# specific paths it owns.
+/.claude/
