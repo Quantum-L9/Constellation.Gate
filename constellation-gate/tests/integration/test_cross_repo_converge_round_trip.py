@@ -157,3 +157,38 @@ def test_dispatch_hop_is_recorded_against_the_derived_packet() -> None:
     assert len(dispatch_hops) == 1
     assert dispatch_hops[0].target_node == "eie"
     assert dispatch_hops[0].packet_id == worker_packet.header.packet_id
+
+
+def test_converge_is_routable_to_an_eie_owned_node_and_dispatches_through_the_sdk() -> None:
+    """Readiness and dispatch are the same claim, so prove them together.
+
+    ``action_routability`` reporting converge routable is a registry-level
+    statement; it says nothing about whether a packet actually reaches the node.
+    Asserting both against one registry is what makes "converge is routable to
+    EIE" mean the thing an operator reads it as.
+
+    The worker here is an SDK-backed stand-in, NOT a live EIE process. That
+    distinction is recorded as ``real_eie: NOT_RUN`` in FINAL_FINDINGS.md rather
+    than implied by this passing.
+    """
+    from constellation_gate.runtime.routing_readiness import action_routability
+
+    validator, registry, worker = _gate_stack()
+    register_handler("converge", lambda packet: dict(WORKER_RESULT))
+
+    readiness = action_routability(registry, "converge")
+    assert readiness["routable"] is True
+    assert readiness["required_owner"] == "eie"
+
+    validated = validator.validate(_root_packet().model_dump_json_dict())
+
+    async def run() -> TransportPacket:
+        async with worker.client() as client:
+            dispatcher = Dispatcher(local_node="gate", registry=registry, client=client)
+            return await dispatcher.dispatch(validated)
+
+    result = asyncio.run(run())
+
+    assert worker.ingress_errors == []
+    assert worker.received_packets[0].address.destination_node == "eie"
+    assert result.payload == WORKER_RESULT
