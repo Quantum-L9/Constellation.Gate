@@ -87,8 +87,9 @@ def _responds(status_code: int, body):
 @pytest.mark.asyncio
 async def test_unreachable_worker_is_marked_unhealthy() -> None:
     registry = _registry()
+    handler = _raises(httpx.ConnectError("refused"))
     with pytest.raises(WorkerConnectionError):
-        await _dispatch(registry, _raises(httpx.ConnectError("refused")))
+        await _dispatch(registry, handler)
 
     assert registry.snapshot()["worker"].healthy is False
 
@@ -97,8 +98,9 @@ async def test_unreachable_worker_is_marked_unhealthy() -> None:
 async def test_a_slow_worker_is_not_marked_unhealthy() -> None:
     """A timeout says 'no answer yet', not 'this node is down'."""
     registry = _registry()
+    handler = _raises(httpx.ReadTimeout("slow"))
     with pytest.raises(WorkerTimeoutError) as info:
-        await _dispatch(registry, _raises(httpx.ReadTimeout("slow")))
+        await _dispatch(registry, handler)
 
     assert not isinstance(info.value, WorkerConnectionError), (
         "a timeout must stay distinguishable from an unreachable node"
@@ -112,8 +114,9 @@ async def test_a_slow_worker_is_not_marked_unhealthy() -> None:
 async def test_an_http_error_does_not_mark_the_worker_unhealthy() -> None:
     """A 500 from the worker is an upstream bug, not an unreachable node."""
     registry = _registry()
+    handler = _responds(500, {})
     with pytest.raises(WorkerHTTPError) as info:
-        await _dispatch(registry, _responds(500, {}))
+        await _dispatch(registry, handler)
 
     assert info.value.status_code == 500
     assert registry.snapshot()["worker"].healthy is True
@@ -123,8 +126,9 @@ async def test_an_http_error_does_not_mark_the_worker_unhealthy() -> None:
 async def test_an_uninterpretable_body_does_not_mark_the_worker_unhealthy() -> None:
     """A 200 carrying something that is not a canonical packet is still not 'down'."""
     registry = _registry()
+    handler = _responds(200, {"not": "a packet"})
     with pytest.raises(WorkerResponseError):
-        await _dispatch(registry, _responds(200, {"not": "a packet"}))
+        await _dispatch(registry, handler)
 
     assert registry.snapshot()["worker"].healthy is True
 
@@ -148,8 +152,9 @@ async def test_every_dispatch_failure_is_a_typed_sdk_dispatch_error() -> None:
 async def test_a_dispatch_failure_is_attributed_to_the_resolved_node() -> None:
     """The SDK is told a target and never resolves one, so Gate supplies the name."""
     registry = _registry()
+    handler = _raises(httpx.ConnectError("refused"))
     with pytest.raises(GateDispatchError) as info:
-        await _dispatch(registry, _raises(httpx.ConnectError("refused")))
+        await _dispatch(registry, handler)
 
     assert info.value.node_name == "worker"
 
@@ -158,8 +163,9 @@ async def test_a_dispatch_failure_is_attributed_to_the_resolved_node() -> None:
 async def test_the_underlying_cause_chain_survives_attribution() -> None:
     """Attribution must not overwrite or suppress the SDK's own ``__cause__``."""
     registry = _registry()
+    handler = _raises(httpx.ConnectError("refused"))
     with pytest.raises(WorkerConnectionError) as info:
-        await _dispatch(registry, _raises(httpx.ConnectError("refused")))
+        await _dispatch(registry, handler)
 
     assert isinstance(info.value.__cause__, httpx.ConnectError), (
         "re-raising must preserve the httpx failure the SDK chained"

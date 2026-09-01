@@ -188,8 +188,10 @@ async def test_the_sdk_owns_the_execution_endpoint_not_the_caller() -> None:
         "ftp://eie:8000",
         "",
     ):
+        # Built outside the block: only the send may satisfy the assertion.
+        packet = _gate_authored()
         with pytest.raises(GateDispatchConfigurationError):
-            await _send(_gate_authored(), url=bad_url)
+            await _send(packet, url=bad_url)
 
         worker: SdkWorker = _send.last_worker  # type: ignore[attr-defined]
         assert worker.request_count == 0, f"{bad_url!r} reached the network"

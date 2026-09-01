@@ -141,10 +141,12 @@ def test_expired_deadline_refuses_to_open_a_worker_connection() -> None:
     deadline = Deadline(10.0, clock=clock)
     worker = _worker()
 
+    registry = _registry(timeout_ms=5_000)
+    packet = _inbound()
     clock.advance(11.0)
 
     with pytest.raises(DeadlineExceeded):
-        asyncio.run(_dispatch(worker, _registry(timeout_ms=5_000), _inbound(), deadline))
+        asyncio.run(_dispatch(worker, registry, packet, deadline))
 
     assert worker.request_count == 0
 
@@ -160,10 +162,12 @@ def test_a_sub_millisecond_remainder_is_reported_as_a_deadline_failure() -> None
     deadline = Deadline(10.0, clock=clock)
     worker = _worker()
 
+    registry = _registry(timeout_ms=5_000)
+    packet = _inbound()
     clock.advance(9.9999)
 
     with pytest.raises(DeadlineExceeded):
-        asyncio.run(_dispatch(worker, _registry(timeout_ms=5_000), _inbound(), deadline))
+        asyncio.run(_dispatch(worker, registry, packet, deadline))
 
     assert worker.request_count == 0
 

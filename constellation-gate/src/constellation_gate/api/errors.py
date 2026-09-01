@@ -15,6 +15,15 @@ from constellation_gate.resilience.circuit_breaker import CircuitBreakerOpenErro
 from constellation_gate.resilience.load_shedding import LoadShedError
 from constellation_gate.resilience.rate_limiter import RateLimitExceededError
 
+# Gate's own faults answer with a fixed, uninformative body on purpose: an
+# internal defect must not leak Gate's internals to a caller who cannot act on
+# them. One constant so the three 500 paths cannot drift into three different
+# messages that look like three different failures.
+_INTERNAL_ERROR_DETAIL = {
+    "code": "internal_error",
+    "message": "internal server error",
+}
+
 _ADMISSION_ERRORS = (
     RateLimitExceededError,
     LoadShedError,
@@ -89,25 +98,13 @@ def to_http_exception(exc: Exception) -> HTTPException:
     # matched before the generic ValueError branch below or a Gate bug is
     # reported to the caller as a 400 they cannot act on.
     if isinstance(exc, GateDispatchAuthorityError | GateDispatchConfigurationError):
-        return HTTPException(
-            status_code=500,
-            detail={
-                "code": "internal_error",
-                "message": "internal server error",
-            },
-        )
+        return HTTPException(status_code=500, detail=dict(_INTERNAL_ERROR_DETAIL))
 
     # An outbound security failure is Gate's (it could not sign); an inbound one
     # means the worker's answer could not be trusted, which is an upstream fault.
     if isinstance(exc, GateDispatchSecurityError):
         if exc.direction == "outbound":
-            return HTTPException(
-                status_code=500,
-                detail={
-                    "code": "internal_error",
-                    "message": "internal server error",
-                },
-            )
+            return HTTPException(status_code=500, detail=dict(_INTERNAL_ERROR_DETAIL))
         return HTTPException(
             status_code=502,
             detail={
@@ -140,10 +137,4 @@ def to_http_exception(exc: Exception) -> HTTPException:
             },
         )
 
-    return HTTPException(
-        status_code=500,
-        detail={
-            "code": "internal_error",
-            "message": "internal server error",
-        },
-    )
+    return HTTPException(status_code=500, detail=dict(_INTERNAL_ERROR_DETAIL))

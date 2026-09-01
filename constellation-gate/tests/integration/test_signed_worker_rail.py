@@ -21,10 +21,12 @@ import json
 import httpx
 import pytest
 from constellation_node_sdk.gate_authority import (
+    GateDispatchConfigurationError,
     GateDispatchSecurityError,
     GateDispatchTransport,
     GateDispatchTransportConfig,
 )
+from constellation_node_sdk.transport.errors import TransportIntegrityError
 from constellation_node_sdk.transport.hop_trace import make_dispatch_hop
 from constellation_node_sdk.transport.packet import TransportPacket, create_transport_packet
 from constellation_node_sdk.transport.provenance import RoutingProvenance
@@ -169,10 +171,13 @@ async def test_the_worker_refuses_a_dispatch_tampered_with_in_flight() -> None:
         body["payload"] = {"opaque": False, "injected": True}
         return body
 
-    with pytest.raises(Exception) as info:
+    # TransportIntegrityError specifically, not a bare Exception: the packet's
+    # own integrity hash is what rejects it, and a broad assertion here would
+    # also pass if the request had failed for some unrelated reason -- which is
+    # the vacuous-test trap this suite exists to avoid.
+    with pytest.raises(TransportIntegrityError) as info:
         await _round_trip(worker, on_request=alter_payload)
 
-    assert not isinstance(info.value, AssertionError)
     # The tampered body did reach the worker's socket...
     assert worker.request_count == 1
     # ...and was refused at canonical decode, BEFORE ingress policy or the
@@ -235,12 +240,11 @@ async def test_gate_refuses_a_response_signed_by_the_wrong_known_signer() -> Non
 async def test_gate_cannot_dispatch_when_it_cannot_sign() -> None:
     """A misconfigured signing setup must fail closed, never dispatch unsigned."""
     worker = _signing_worker()
+    # Built outside the raises block so the assertion can only be satisfied by
+    # the dispatch itself failing, never by config construction throwing.
+    unsignable = _gate_config(signing_key_id=None, signing_algorithm=None)
 
-    with pytest.raises(Exception) as info:
-        await _round_trip(
-            worker,
-            config=_gate_config(signing_key_id=None, signing_algorithm=None),
-        )
+    with pytest.raises(GateDispatchConfigurationError):
+        await _round_trip(worker, config=unsignable)
 
     assert worker.request_count == 0, "an unsignable dispatch still reached the worker"
-    assert not isinstance(info.value, AssertionError)

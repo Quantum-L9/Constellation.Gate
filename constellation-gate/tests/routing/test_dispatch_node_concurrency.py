@@ -65,8 +65,9 @@ async def test_dispatch_enforces_per_node_concurrency_limit() -> None:
         first_task = asyncio.create_task(dispatcher.dispatch(_packet("42")))
         await worker.entered.wait()
 
+        second = _packet("43")
         with pytest.raises(NodeLimitExceededError):
-            await dispatcher.dispatch(_packet("43"))
+            await dispatcher.dispatch(second)
 
         worker.release.set()
         result = await first_task
