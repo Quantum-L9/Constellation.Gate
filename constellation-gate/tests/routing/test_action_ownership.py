@@ -57,32 +57,57 @@ def test_cross_owner_collision_blocked() -> None:
 
 def test_non_canonical_cross_owner_collision_blocked() -> None:
     registry = NodeRegistry()
-    registry.register_node("worker-a", _node("worker-a", ("enrich",), owner="ceg"))
+    registry.register_node("worker-a", _node("worker-a", ("score",), owner="ceg"))
     with pytest.raises(ActionOwnershipError, match="collision"):
-        registry.register_node("worker-b", _node("worker-b", ("enrich",), owner="eie"))
+        registry.register_node("worker-b", _node("worker-b", ("score",), owner="eie"))
 
 
 def test_non_canonical_actions_still_allow_multi_replica() -> None:
     registry = NodeRegistry()
     registry.register_node(
-        "enrich-a",
+        "score-a",
         NodeRegistration(
-            node_name="enrich-a",
-            internal_url="http://enrich-a:8000",
-            supported_actions=("enrich",),
+            node_name="score-a",
+            internal_url="http://score-a:8000",
+            supported_actions=("score",),
             active_requests=3,
         ),
     )
     registry.register_node(
-        "enrich-b",
+        "score-b",
         NodeRegistration(
-            node_name="enrich-b",
-            internal_url="http://enrich-b:8000",
-            supported_actions=("enrich",),
+            node_name="score-b",
+            internal_url="http://score-b:8000",
+            supported_actions=("score",),
             active_requests=1,
         ),
     )
-    assert registry.resolve_action("enrich").node_name == "enrich-b"
+    assert registry.resolve_action("score").node_name == "score-b"
+
+
+def test_enrich_is_owned_by_eie_and_ceg_may_not_advertise_it() -> None:
+    """Seam lock: `enrich` is EIE's EnrichRequest operation.
+
+    CEG has a local Cypher handler with the same name; advertising it to Gate
+    would put two incompatible domain contracts behind one route.
+    """
+    registry = NodeRegistry()
+    with pytest.raises(ActionOwnershipError, match="owned by 'eie'"):
+        registry.register_node("graph", _node("graph", ("match", "enrich"), owner="ceg"))
+    registry.register_node("graph", _node("graph", ("match", "sync", "outcomes"), owner="ceg"))
+    registry.register_node(
+        "enrichment-engine",
+        _node("enrichment-engine", ("converge", "enrich", "enrich-and-sync"), owner="eie"),
+    )
+    assert registry.resolve_action("enrich").node_name == "enrichment-engine"
+    assert registry.resolve_action("sync").node_name == "graph"
+
+
+def test_ceg_runtime_node_name_resolves_to_ceg_owner_without_metadata() -> None:
+    """CEG registers under its runtime identity `graph` (engine/spec.yaml)."""
+    registry = NodeRegistry()
+    registry.register_node("graph", _node("graph", ("match", "sync", "outcomes")))
+    assert registry.resolve_action("match").node_name == "graph"
 
 
 def test_admin_registration_surfaces_ownership_error() -> None:

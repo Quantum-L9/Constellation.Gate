@@ -1,23 +1,42 @@
-nodes:
-  enrich:
-    internal_url: http://enrich:8000
-    supported_actions:
-      - enrich
-    priority_class: P2
-    max_concurrent: 20
-    health_endpoint: /v1/health
-    timeout_ms: 30000
-    metadata:
-      domain: research
+# Static seed topology for the EIE <-> CEG seam (seam audit 2026-09-02).
+#
+# Node names MUST equal each node's runtime identity (the SDK runtime rejects a
+# dispatch whose destination_node differs from its L9_NODE_NAME):
+#   - Enrichment.Inference.Engine registers as `enrichment-engine` (app/main.py NODE_NAME)
+#   - Cognitive.Engine.Graphs   registers as `graph`             (engine/spec.yaml node.id)
+#
+# Runtime registration via POST /v1/admin/register (Gate_SDK register_node /
+# register_from_env) is authoritative and overwrites these entries. This file is
+# the documented shape for scripts/migrate_registry.py and pre-deploy checks.
+enrichment-engine:
+  internal_url: http://enrichment-engine:8000
+  supported_actions:
+    - converge
+    - graph-inference-result
+    - enrich
+    - enrich-and-sync
+  priority_class: P2
+  max_concurrent: 50
+  health_endpoint: /api/v1/health
+  # EIE's complete-operation ceiling (CANONICAL_CONVERGE_BUDGET_SECONDS = 25 s).
+  timeout_ms: 25000
+  metadata:
+    owner: eie
+    type: enrichment
+    repo_url: https://github.com/Quantum-L9/Enrichment.Inference.Engine
 
-  cognitive_engine_graphs:
-    internal_url: http://cognitive_engine_graphs:8000
-    supported_actions:
-      - graph
-    priority_class: P2
-    max_concurrent: 20
-    health_endpoint: /v1/health
-    timeout_ms: 30000
-    metadata:
-      domain: graphs
-      repo_url: https://github.com/cryptoxdog/Cognitive.Engine.Graphs
+graph:
+  internal_url: http://graph:8000
+  supported_actions:
+    - match
+    - sync
+    - outcomes
+    - resolve
+  priority_class: P1
+  max_concurrent: 100
+  health_endpoint: /v1/health
+  timeout_ms: 30000
+  metadata:
+    owner: ceg
+    type: engine
+    repo_url: https://github.com/Quantum-L9/Cognitive.Engine.Graphs

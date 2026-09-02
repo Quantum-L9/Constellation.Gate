@@ -1,0 +1,13 @@
+# Side-door seal receipt — 2026-09-02
+confirmed_side_doors: 8
+closed: 8
+reachable_remaining: 0
+proof:
+  static_guards:
+    - {repo: Enrichment.Inference.Engine, file: tests/architecture/test_no_bespoke_gate_transport.py, tests: 17, locks: [retired modules stay deleted, no peer URL/shared-secret settings, no bespoke peer ingress routes, every create_transport_packet targets gate, no raw httpx to /v1/execute, single GateClientConfig factory, SDK-owned registration/transport]}
+    - {repo: Cognitive.Engine.Graphs, file: tests/architecture/test_seam_gate_only.py, tests: 16, locks: [spec advertises only implemented CEG-owned actions and never enrich, no graph-* phantoms, SDK chassis default and legacy dev-only, deployment surfaces select sdk and require Gate+signing in prod, every authored packet targets gate (self-addressed audit reconstruction exempt), no peer URL awareness, no raw HTTP to Gate/peer endpoints, reverse path wired through gate_egress, single GateClient constructor]}
+    - {repo: Constellation.Gate, file: constellation-gate/tests/architecture/test_seam_route_contract.py, locks: [ownership map + SEAM_ACTIONS + readiness aligned]}
+  live_injection: [F-04a, F-04b, O-02]
+  removed_code: [EIE chassis/node_client.py, EIE app/services/graph_sync_hooks.py, EIE app/services/workers/graph_inference_consumer.py, EIE POST /v1/outcomes, EIE peer URL + INTER_NODE_SECRET settings, EIE neo4j dependency, CEG legacy chassis as default/prod option]
+ci_enforcement: "the guard tests run in each repo's existing pytest CI job (EIE ci.yml pure-python tests, CEG ci.yml pytest, Gate ci.yml); the live E2E is marker seam_e2e and skips on runners without sibling checkouts — it is NOT yet a CI gate (see DEPLOYMENT_READINESS_RECEIPT.yaml)"
+final_re_audit: "guards + E2E re-run after all repairs: 0 reachable side doors"

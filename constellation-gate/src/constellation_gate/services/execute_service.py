@@ -45,6 +45,21 @@ def _accepts_deadline(func: Any) -> bool:
     return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
+def _is_terminal_success(result: TransportPacket) -> bool:
+    """True when ``result`` is a successful answer worth caching under its key.
+
+    Reads transport-level signals only: the packet type the SDK runtime emits
+    for a handler exception (``failure``) and the status the runtime records on
+    the response hop. Domain payloads stay opaque (ADR-GATE-003).
+    """
+    if result.header.packet_type == "failure":
+        return False
+    for hop in reversed(result.hop_trace):
+        if hop.direction == "response":
+            return hop.status != "failed"
+    return True
+
+
 class ExecuteService:
     """
     Top-level Gate execution coordinator.
@@ -182,7 +197,14 @@ class ExecuteService:
             self.circuit_breaker.record_success()
 
             # ADR-GATE-009: cache under (tenant, action, key), never the raw key.
-            self.idempotency_store.set_for_packet(packet, result.model_dump_json_dict())
+            # Only a terminal SUCCESS answer is cached. A worker `failure` packet,
+            # or a response whose own response hop reports `failed`, is a
+            # transport-level failure of THIS attempt; caching it would answer
+            # every later retry of the same logical operation with the stale
+            # failure and defeat the retry the idempotency key exists to make
+            # safe (seam audit 2026-09-02, SEAM-013).
+            if _is_terminal_success(result):
+                self.idempotency_store.set_for_packet(packet, result.model_dump_json_dict())
 
             record_request(action=packet.header.action, status="completed")
             if (

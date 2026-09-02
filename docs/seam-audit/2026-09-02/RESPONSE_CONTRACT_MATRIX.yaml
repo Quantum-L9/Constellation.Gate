@@ -1,0 +1,31 @@
+# Response contract matrix (payload of the response TransportPacket returned to the originator) — 2026-09-02
+responses:
+  - action: sync
+    responder: CEG handle_sync
+    success_payload: {status: success, entity_type: "<entity_type>", synced_count: int}
+    observed: 'A-01: {"status": "success", "entity_type": "facilities", "synced_count": 1}'
+    alternative: "{status: all_rejected, ...} when compliance rejects every row; ValidationError -> failure packet (unknown entity_type, empty batch)"
+    consumer_handling: EIE PacketRouter returns the payload plus packet_id; None on NodeUnreachableError
+  - action: match
+    responder: CEG handle_match
+    success_payload_keys: [candidates, execution_time_ms, match_direction, query_id, scoring_meta, total_candidates]
+    observed: keys above with total_candidates=0 on an empty graph (A-02)
+    consumer_handling: "EIE GraphSyncClient returns payload + packet_id + packet_type; failures mapped to {status: failed, error: <code>, error_type}"
+  - action: outcomes
+    responder: "CEG handle_outcomes"
+    success_payload: "{status: recorded, outcome_id: out_<hex12>, feedback: {feedback_loop, propagation{...}, weights_recalculated, drift{...}}}"
+    observed: A-03
+  - action: resolve
+    responder: CEG handle_resolve
+    payload: UNKNOWN (not exercised)
+  - action: enrich
+    responder: EIE handle_enrich -> EnrichResponse.model_dump()
+    payload_keys: [state, failure_reason, fields, confidence, variation_count, consensus_threshold, uncertainty_score, pass_count, kb_content_hash, kb_fragment_ids, ...]
+    observed: "state=failed, failure_reason=\"no_valid_responses (5 errors: APIConnectionError ...)\" \u2014 no LLM provider credentials in the E2E environment (B-01); packet_type=response (handler did not raise)"
+    consumer_handling: "CEG gate_egress returns {status: ok|failed, packet_id, packet_type, idempotency_key, correlation_id, payload}; trigger_reenrichment_v2 sets triggered=(status==ok)"
+  - action: converge / enrich-and-sync / graph-inference-result
+    payload: per EIE handlers; NOT_EXECUTED in this seam
+failure_packets:
+  shape: "packet_type=failure; payload {status: failed, error: <exception class>, message: <redacted unless L9_EXPOSE_INTERNAL_ERRORS>, packet_id}"
+  gate_http_mapping: 400 invalid packet/request, 401 auth, 403 routing policy, 404 route unavailable, 429 admission, 502 worker transport, 504 timeout, 500 internal
+  observed: F-01 400 invalid_request; F-02 400 invalid_transport_packet "signature required but not present"; F-03 404; F-04a 403 (CEG middleware); F-04b failure packet error=ValueError (SDK ingress policy, redacted)

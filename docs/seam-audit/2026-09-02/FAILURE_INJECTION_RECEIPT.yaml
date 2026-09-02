@@ -1,0 +1,17 @@
+# Failure injection receipt — live constellation, 2026-09-02 (tests/e2e/seam/test_failure_injection.py, test_zz_outage.py)
+cases:
+  - {id: F-01, injected: malformed JSON body to Gate /v1/execute, expected: reject before admission, observed: "HTTP 400 invalid_request", status: PASS}
+  - {id: F-02, injected: structurally valid unsigned TransportPacket from EIE identity to Gate, expected: reject, observed: "HTTP 400 invalid_transport_packet 'signature required but not present'", status: PASS}
+  - {id: F-03, injected: action graph-query (no owner), expected: 404 and no retry, observed: "GateHTTPError 404; EIE PacketRouter raised NodeUnreachableError after 1 attempt", status: PASS}
+  - {id: F-04a, injected: EIE-authored packet posted directly to CEG /v1/execute (bypassing Gate), expected: refused, observed: "HTTP 403 'gate-only ingress: provenance.origin_kind must be gate, got node'", status: PASS}
+  - {id: F-04b, injected: CEG-authored valid EnrichRequest posted directly to EIE /v1/execute, expected: refused before handler, observed: "HTTP 200 with signed failure packet (error ValueError, redacted); no `state` in payload; pipeline_started count unchanged -> handler not executed", status: PASS, findings: [SEAM-INGRESS-01, SDK-OBS-01]}
+  - {id: F-05, injected: timeout_ms=1 on sync, expected: fail closed on the single deadline, observed: "GateTimeoutError 'Gate did not respond within 0.001s (ReadTimeout)' — client-side deadline derived from header.timeout_ms fired first", status: PASS, note: "Gate-side 504 path not reached with this budget; deadline identity between header and socket is what was proven"}
+  - {id: F-06, injected: same idempotency key twice on sync, expected: cached response, observed: "identical packet_id on both calls", status: PASS}
+  - {id: F-07, injected: identical signed packet delivered twice (send_to_gate x2), expected: not executed twice, observed: "both deliveries answered with the same packet_id; exactly one Neo4j row for the entity", status: PASS}
+  - {id: O-01, injected: CEG process stopped, expected: EIE fails closed, Gate not ready, observed: "notify_graph_sync -> None (NodeUnreachableError, no fallback); Gate /v1/ready 503 ready=false", status: PASS}
+  - {id: O-02, injected: Gate process stopped, expected: both nodes fail closed with no peer attempt, observed: "EIE: GateConnectionError, 1 retry (key present) then NodeUnreachableError; CEG: GateConnectionError after 1 attempt; no direct peer call in either log", status: PASS}
+not_executed:
+  - {id: malformed_worker_response, reason: "cannot be injected into a real SDK worker without modifying it; SDK unit tests cover GateResponseError", status: NOT_EXECUTED}
+  - {id: gate_side_504, reason: "a worker that stalls is not available in the real constellation; Gate unit tests cover the 504 mapping", status: NOT_EXECUTED}
+  - {id: ed25519_signatures, reason: "hmac-sha256 exercised only", status: NOT_EXECUTED}
+summary: {executed: 10, passed: 10, failed: 0, not_executed: 3}

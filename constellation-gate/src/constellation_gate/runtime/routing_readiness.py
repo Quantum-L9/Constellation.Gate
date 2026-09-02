@@ -14,14 +14,18 @@ from __future__ import annotations
 from typing import Any
 
 from constellation_gate.routing.action_ownership import (
+    SEAM_ACTIONS,
     normalize_owner,
     owner_for_registration,
     required_owner_for_action,
 )
 from constellation_gate.routing.node_registry import NodeRegistry
 
-# The canonical rail that must be routable before a Gate canary.
-DEFAULT_REQUIRED_ACTIONS: tuple[str, ...] = ("converge",)
+# The canonical rails that must be routable before a Gate canary: the complete
+# bidirectional EIE <-> CEG seam (seam audit 2026-09-02). A Gate that can route
+# `converge` to EIE but cannot route `sync` to CEG is not ready for the seam --
+# EIE's post-enrichment side effects would fail closed on every request.
+DEFAULT_REQUIRED_ACTIONS: tuple[str, ...] = SEAM_ACTIONS
 
 
 def action_routability(registry: NodeRegistry, action: str) -> dict[str, Any]:

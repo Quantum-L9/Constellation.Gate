@@ -1,0 +1,45 @@
+2026-09-02 20:20:02 [info     ] otel_initialized               endpoint=http://otel-collector:4317 environment=development service=enrichment-engine
+INFO:     Started server process [18946]
+INFO:     Waiting for application startup.
+{"asctime": "2026-09-02 20:20:02,402", "levelname": "INFO", "name": "kb_resolver", "message": "KB loaded: 1 files, 0 polymers, 0 grades, 0 rules"}
+{"url": "redis://localhost:6379/0", "event": "redis_connected", "level": "info", "timestamp": "2026-09-02T20:20:02.403283Z"}
+{"handlers": ["enrich", "enrichbatch", "converge", "discover", "simulate", "writeback", "enrich-and-sync"], "gate_url": "http://127.0.0.1:19000", "event": "orchestration.registered", "level": "info", "timestamp": "2026-09-02T20:20:02.403446Z"}
+{"handlers": ["community-export", "converge", "discover", "enrich", "enrich-and-sync", "enrichbatch", "graph-inference-result", "schema-proposal", "simulate", "writeback"], "event": "sdk_handlers_registered", "level": "info", "timestamp": "2026-09-02T20:20:02.404675Z"}
+{"pool_size": 10, "max_overflow": 20, "event": "pg_engine_initialized", "level": "info", "timestamp": "2026-09-02T20:20:02.466794Z"}
+{"event": "pg_store_initialized", "level": "info", "timestamp": "2026-09-02T20:20:02.467040Z"}
+{"profiles": ["failed_match", "high_null", "new_intake", "nightly_stale"], "state_backend": "redis", "event": "converge_module_configured", "level": "info", "timestamp": "2026-09-02T20:20:02.467083Z"}
+{"asctime": "2026-09-02 20:20:02,510", "levelname": "INFO", "name": "httpx", "message": "HTTP Request: POST http://127.0.0.1:19000/v1/admin/register?overwrite=true \"HTTP/1.1 200 OK\""}
+{"result": true, "event": "gate_registration_attempted", "level": "info", "timestamp": "2026-09-02T20:20:02.510559Z"}
+{"version": "2.3.0", "event": "api_started", "level": "info", "timestamp": "2026-09-02T20:20:02.510597Z"}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:19001 (Press CTRL+C to quit)
+INFO:     127.0.0.1:59780 - "GET /api/v1/health HTTP/1.1" 200 OK
+{"asctime": "2026-09-02 20:20:07,379", "levelname": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to otel-collector:4317, retrying in 0.95s. Error details: errors resolving otel-collector:4317: [field:hostname lookup error:address lookup failed for otel-collector:4317: Domain name not found]"}
+{"entity_name": "Seam E2E Facility", "object_type": "plasticos", "variations": 5, "kb_fragments": 0, "sonar_optimized": false, "model": "sonar-reasoning", "event": "pipeline_started", "level": "info", "timestamp": "2026-09-02T20:20:09.281082Z"}
+{"effective_timeout_s": 120.0, "deadline_bound": false, "event": "provider_timeout_resolved", "level": "info", "timestamp": "2026-09-02T20:20:09.281173Z"}
+{"sdk_max_retries": 0, "event": "client_initialized", "level": "info", "timestamp": "2026-09-02T20:20:09.344989Z"}
+{"sdk_max_retries": 0, "event": "client_initialized", "level": "info", "timestamp": "2026-09-02T20:20:09.346294Z"}
+{"sdk_max_retries": 0, "event": "client_initialized", "level": "info", "timestamp": "2026-09-02T20:20:09.350585Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:09.448488Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:09.448550Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:09.448569Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:09.448581Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:09.448593Z"}
+INFO:     127.0.0.1:34374 - "POST /v1/execute HTTP/1.1" 200 OK
+{"entity_name": "?", "object_type": "plasticos", "variations": 5, "kb_fragments": 0, "sonar_optimized": false, "model": "sonar-reasoning", "event": "pipeline_started", "level": "info", "timestamp": "2026-09-02T20:20:10.779297Z"}
+{"effective_timeout_s": 120.0, "deadline_bound": false, "event": "provider_timeout_resolved", "level": "info", "timestamp": "2026-09-02T20:20:10.779391Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:10.809536Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:10.809600Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:10.809629Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:10.809643Z"}
+{"error": "Connection error.", "event": "variation_failed", "level": "warning", "timestamp": "2026-09-02T20:20:10.809656Z"}
+INFO:     127.0.0.1:34374 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34384 - "POST /v1/execute HTTP/1.1" 200 OK
+{"asctime": "2026-09-02 20:20:14,480", "levelname": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to otel-collector:4317, error code: StatusCode.UNAVAILABLE, error details: errors resolving otel-collector:4317: [field:hostname lookup error:address lookup failed for otel-collector:4317: Domain name not found]"}
+{"asctime": "2026-09-02 20:20:19,483", "levelname": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to otel-collector:4317, retrying in 1.09s. Error details: errors resolving otel-collector:4317: [field:hostname lookup error:address lookup failed for otel-collector:4317: Domain name not found]"}
+{"asctime": "2026-09-02 20:20:20,576", "levelname": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to otel-collector:4317, retrying in 1.79s. Error details: errors resolving otel-collector:4317: [field:hostname lookup error:address lookup failed for otel-collector:4317: Domain name not found]"}
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+{"event": "pg_engine_closed", "level": "info", "timestamp": "2026-09-02T20:20:21.822111Z"}
+INFO:     Application shutdown complete.
+INFO:     Finished server process [18946]

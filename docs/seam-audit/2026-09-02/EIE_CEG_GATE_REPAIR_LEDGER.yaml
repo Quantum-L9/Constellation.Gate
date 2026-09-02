@@ -1,0 +1,178 @@
+# Findings + repair ledger — EIE <-> Gate <-> CEG seam forensic audit (2026-09-02)
+# Severity: P0 = live data loss/security breach, P1 = seam cannot work or is bypassable,
+# P2 = seam works but violates a lock (retry/idempotency/contract drift), P3 = hygiene/observability.
+counts: {P0: 0, P1: 14, P2: 11, P3: 8, total: 33, repaired: 27, documented_not_repaired: 4, unknown: 2}
+findings:
+  # ---------------- Gate_SDK ----------------
+  - id: SDK-01
+    repo: Gate_SDK
+    severity: P1
+    finding: get_gate_client_config_from_env() hard-coded verifying_keys={} while enabling verify_response_signatures from L9_REQUIRE_SIGNATURE; Gate signs responses with Gate's key id, so every signature-requiring node rejected every signed Gate response (GateSecurityError "no verifying key available"). Found by the live E2E (first run of A-01).
+    repair: load L9_VERIFYING_KEYS_JSON (same contract as the worker runtime), fail fast on malformed JSON; tests added; CHANGELOG Unreleased/Fixed.
+    commit: 69c6c67060b08440734a61473c03663423709964
+    status: REPAIRED
+  - id: SDK-OBS-01
+    repo: Gate_SDK
+    severity: P3
+    finding: worker runtime reports a gate-only ingress rejection as a redacted "ValueError" failure packet over HTTP 200 (L9_RETURN_TRANSPORT_ERRORS default) and writes no log line; indistinguishable from a handler ValueError without logs.
+    repair: none this pass (behaviour is the SDK's documented return_transport_errors contract); recorded for SDK follow-up.
+    status: DOCUMENTED
+  # ---------------- Constellation.Gate ----------------
+  - id: GATE-01
+    repo: Constellation.Gate
+    severity: P1
+    finding: CANONICAL_ACTION_OWNERS had no owner for `enrich`/`enrich-and-sync`, and node name `graph` (CEG's runtime id) resolved to no owner, so CEG registration was rejected / EIE-owned actions were unroutable, and a CEG replica advertising `enrich` would have been load-balanced against EIE.
+    repair: owners added (enrich, enrich-and-sync -> eie); aliases graph/graph-engine -> ceg; SEAM_ACTIONS constant; tests.
+    status: REPAIRED
+  - id: GATE-02
+    repo: Constellation.Gate
+    severity: P2
+    finding: /v1/ready considered only `converge` routable; a Gate with no CEG at all reported ready.
+    repair: DEFAULT_REQUIRED_ACTIONS = SEAM_ACTIONS (all seven seam actions); tests (503 with EIE only, 200 with both). Proven live (REG-02, O-01 -> 503 when CEG stops).
+    status: REPAIRED
+  - id: GATE-03
+    repo: Constellation.Gate
+    severity: P2
+    finding: ExecuteService cached failure packets under the idempotency key, so a retry with the same key replayed the failure instead of re-executing.
+    repair: "_is_terminal_success(): cache only response packets whose last response hop is not failed; tests."
+    status: REPAIRED
+  - id: GATE-04
+    repo: Constellation.Gate
+    severity: P3
+    finding: config/node_registry.yaml named nodes/actions that do not exist (stale).
+    repair: rewritten to enrichment-engine / graph with real actions, health endpoints, timeouts, owners. UNKNOWN whether any deployment loads this file (api/main.py does not).
+    status: REPAIRED
+  - id: GATE-05
+    repo: Constellation.Gate
+    severity: P3
+    finding: replay_safety.WORKER_OWNED_RETRY_ACTIONS lacked enrich / enrich-and-sync.
+    repair: added.
+    status: REPAIRED
+  - id: GATE-06
+    repo: Constellation.Gate
+    severity: P2
+    finding: Gate_SDK pinned to an unmerged PR head (bfe6642) whose branch no longer exists.
+    repair: pinned to 69c6c67 (main a0827f2 + SDK-01); validate_sdk_pin updated.
+    status: REPAIRED
+  - id: GATE-RETURN-01
+    repo: Constellation.Gate
+    severity: P3
+    finding: Gate relays the worker's response packet to the originator unchanged (address graph->gate, no Gate hop on the return leg). Gate-authorship evidence lives only in the derived packet's provenance.
+    repair: none; contract-locked as-is in BIDIRECTIONAL_CONTRACT_LOCK.yaml (originators must not use address.* to reach peers).
+    status: DOCUMENTED
+  # ---------------- Enrichment.Inference.Engine ----------------
+  - id: EIE-01
+    repo: Enrichment.Inference.Engine
+    severity: P1
+    finding: app/main.py built NodeRuntimeConfig by hand and dropped signing config; SDK preflight would fail closed in staging/prod (gate-only ingress requires a verified signature).
+    repair: _build_runtime_config() derives from get_runtime_config() and overrides only EIE identity/actions/caps.
+    status: REPAIRED
+  - id: EIE-02
+    repo: Enrichment.Inference.Engine
+    severity: P1
+    finding: outbound GateClientConfig constructed in three places, none signed.
+    repair: single factory app/services/gate_client.py (build_gate_client_config/build_gate_client) reusing the SDK env loader; guard test_outbound_gate_config_has_a_single_factory.
+    status: REPAIRED
+  - id: EIE-03
+    repo: Enrichment.Inference.Engine
+    severity: P1
+    finding: PacketRouter sent action `graph-sync` (no owner, 404) with a payload that did not match CEG `sync` ({entity_type, batch}).
+    repair: sends `sync` with {entity_type, batch:[row]} (row = id property + entity_id + domain + primitive fields, nested values JSON-encoded, enriched_by); proven live (A-01 row merged into Neo4j).
+    status: REPAIRED
+  - id: EIE-04
+    repo: Enrichment.Inference.Engine
+    severity: P1
+    finding: GraphSyncClient used action `outcome`; CEG's handler is `outcomes`.
+    repair: action renamed; contract pair literal updated; proven live (A-03).
+    status: REPAIRED
+  - id: EIE-05
+    repo: Enrichment.Inference.Engine
+    severity: P2
+    finding: PacketRouter retried every error (including 4xx) with no idempotency key.
+    repair: at most 2 attempts; retry only on connection errors, or on timeout/5xx when an idempotency key is present; 4xx never retried; proven live (F-03 no retry on 404, O-02 one retry on connection error with key).
+    status: REPAIRED
+  - id: EIE-SIDE-DOOR-01..06
+    repo: Enrichment.Inference.Engine
+    severity: P1 (01, 02, 04) / P2 (03, 05, 06)
+    finding: see SIDE_DOOR_CENSUS.yaml
+    repair: removed; guards added.
+    status: REPAIRED
+  - id: EIE-06
+    repo: Enrichment.Inference.Engine
+    severity: P3
+    finding: notify_score_invalidate sends `score-invalidate` to Gate; no node owns it (404). Score node is outside audit scope.
+    repair: single attempt, fail closed, no retry; owner remains UNKNOWN.
+    status: UNKNOWN
+  - id: EIE-07
+    repo: Enrichment.Inference.Engine
+    severity: P3
+    finding: "`graph-inference-result` is advertised by EIE but has no producer in CEG (dormant inbound action); event_emitter Redis stream has no CEG consumer."
+    repair: none (not seam traffic); documented in the route matrix.
+    status: DOCUMENTED
+  - id: DEPLOY-01
+    repo: Enrichment.Inference.Engine
+    severity: P2
+    finding: docker-compose, helm values/deployment, kustomize network policy and env contracts carried CEG_BASE_URL/Neo4j and no Gate/signing configuration.
+    repair: GATE_URL/GATE_INTERNAL_URL/registration + L9_* signing config; signing key and admin token from the existing secret; egress allow-list to the Gate pod only.
+    status: REPAIRED
+  # ---------------- Cognitive.Engine.Graphs ----------------
+  - id: CEG-01
+    repo: Cognitive.Engine.Graphs
+    severity: P1
+    finding: engine/spec.yaml advertised 23 `graph-*` actions, none implemented, none used by EIE; the implemented actions were not advertised.
+    repair: advertises match, sync, outcomes, resolve; guard test_spec_advertises_only_implemented_ceg_owned_actions.
+    status: REPAIRED
+  - id: CEG-02
+    repo: Cognitive.Engine.Graphs
+    severity: P1
+    finding: default chassis `legacy` (dict ExecuteRequest, api-key auth, no Gate provenance) — Gate cannot dispatch to it and any peer can bypass Gate (CEG-SIDE-DOOR-01).
+    repair: SDK chassis default; legacy refused outside dev/local/test; require_sdk_chassis_in_prod=True; deployment surfaces select sdk.
+    status: REPAIRED
+  - id: CEG-03
+    repo: Cognitive.Engine.Graphs
+    severity: P1
+    finding: Gate_SDK pinned to a770e85 (predates derive hop reset / UTC hash fix, gate_authority, register_node, execute()).
+    repair: pinned to 69c6c67; poetry.lock regenerated; test fixture for the pinned SDK's default caps updated.
+    status: REPAIRED
+  - id: CEG-04
+    repo: Cognitive.Engine.Graphs
+    severity: P1
+    finding: "no CEG -> Gate -> EIE path: get_gate_client() never called, trigger_reenrichment_v2 built a payload and never sent it, handle_health_assess unregistered."
+    repair: engine/gate_egress.request_enrichment (SDK GateClient.execute, action `enrich`, EIE-shaped payload, idempotency key, one attempt, fail closed without GATE_URL); trigger wired; proven live (B-01, B-02).
+    status: REPAIRED
+  - id: CEG-05
+    repo: Cognitive.Engine.Graphs
+    severity: P2
+    finding: CEG's local `enrich` handler (Cypher property enrichment) was advertised/allowed under the same action name Gate routes to EIE.
+    repair: not advertised; removed from L9_ALLOWED_ACTIONS in compose/.env/Makefile; Gate ownership lock (GATE-01); guard test_allowed_actions_never_include_enrich.
+    status: REPAIRED
+  - id: CEG-06
+    repo: Cognitive.Engine.Graphs
+    severity: P3
+    finding: require_sdk_chassis_in_prod defaulted to False.
+    repair: True.
+    status: REPAIRED
+  - id: DEPLOY-02
+    repo: Cognitive.Engine.Graphs
+    severity: P2
+    finding: docker-compose.prod.yml carried no chassis/Gate/signing configuration; dev compose selected legacy.
+    repair: prod requires GATE_URL, GATE_ADMIN_TOKEN, L9_SIGNING_KEY (no defaults), sdk chassis, gate-only ingress, signature required; dev compose/Makefile/.env select sdk.
+    status: REPAIRED
+  - id: DEPLOY-03
+    repo: Cognitive.Engine.Graphs
+    severity: P2
+    finding: "handlers query Neo4j `database=domain_spec.domain.id` (\"plasticos\"); the E2E needed the single Community database renamed via initial.dbms.default_database. Whether the production Neo4j (compose: neo4j:5-enterprise) has a `plasticos` database is UNKNOWN."
+    repair: none (deployment prerequisite recorded in DEPLOYMENT_READINESS_RECEIPT.yaml).
+    status: UNKNOWN
+  - id: SEAM-INGRESS-01
+    repo: cross-repo
+    severity: P3
+    finding: CEG's gate-only middleware answers HTTP 403 on a direct call; EIE's SDK runtime answers a signed failure packet over HTTP 200. Both refuse before any handler runs.
+    repair: none; documented.
+    status: DOCUMENTED
+  - id: VER-01
+    repo: cross-repo
+    severity: P1
+    finding: three different SDK pins across the rail (EIE/Gate bfe6642 [deleted branch], CEG a770e85).
+    repair: one tuple, see VERSION_COMPATIBILITY_RECEIPT.yaml.
+    status: REPAIRED
