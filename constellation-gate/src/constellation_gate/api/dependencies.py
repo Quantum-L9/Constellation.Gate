@@ -7,7 +7,9 @@ from typing import Any
 
 import httpx
 import yaml
+from constellation_node_sdk import sign_transport_packet
 from constellation_node_sdk.gate_authority import GateDispatchTransportConfig
+from constellation_node_sdk.transport.packet import TransportPacket
 
 from constellation_gate.boundary.ingress_validator import IngressValidator
 from constellation_gate.config.settings import GateSettings, get_settings
@@ -149,6 +151,29 @@ def get_gate_dispatch_config() -> GateDispatchTransportConfig:
         verify_response_signatures=settings.require_signature,
         verifying_keys=settings.verifying_keys,
         verify_hop_signatures=settings.verify_hop_signatures,
+    )
+
+
+def sign_gate_response(packet: TransportPacket) -> TransportPacket:
+    """Sign the packet Gate hands back to its caller under Gate's own identity.
+
+    Gate returned the worker's response verbatim, still carrying the WORKER's
+    signature (``signing_key_id`` = the worker's key). The SDK verifies every
+    signature it receives, so a caller in a signed topology had to hold each
+    worker's verifying key -- peer-key awareness the Gate-only routing
+    contract exists to prevent. Gate is the caller's sole counterparty; the
+    response is therefore re-signed with Gate's key so callers need Gate's key
+    and nothing else. A Gate without a signing key returns the packet
+    unchanged (the worker signature, if any, stays as it was).
+    """
+    settings = get_gate_settings()
+    if not settings.signing_key or not settings.signing_key_id or not settings.signing_algorithm:
+        return packet
+    return sign_transport_packet(
+        packet,
+        key=settings.signing_key,
+        key_id=settings.signing_key_id,
+        algorithm=settings.signing_algorithm,
     )
 
 

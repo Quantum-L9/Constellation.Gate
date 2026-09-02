@@ -26,6 +26,13 @@ Repairs from the IB-Odoo_19 -> Gate_SDK -> Constellation.Gate -> EIE seam audit.
   every packet log line.
 
 ### Changed
+- `/v1/execute` re-signs the response under Gate's own key when Gate signs.
+  It previously relayed the worker's packet with the worker's signature, so a
+  caller in a signed topology had to hold every worker's verifying key.
+- A signing key is validated at startup: `L9_SIGNING_KEY` needs
+  `L9_SIGNING_KEY_ID`, and `L9_SIGNING_ALGORITHM` defaults to `hmac-sha256`.
+  Previously the incoherent pair started cleanly and every dispatch failed
+  with a 500 (`GateDispatchConfigurationError`).
 - `GATE_ADMIN_TOKEN` is required in `staging` and `prod`; startup fails closed
   because an unauthenticated `/v1/admin/register` is routing takeover.
 - Default `PORT` is 9000, matching every shipped deployment asset.

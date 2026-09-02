@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from functools import lru_cache
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -200,6 +201,29 @@ class GateSettings(BaseModel):
                 f"trusted_ingress_boundary must be one of {sorted(_TRUST_BOUNDARY_MODES)}"
             )
         return normalized
+
+    @model_validator(mode="before")
+    @classmethod
+    def default_signing_algorithm(cls, data: Any) -> Any:
+        """A shared-secret signing key defaults to hmac-sha256.
+
+        The dispatch transport refuses ``signing_key`` without an algorithm, so
+        a Gate configured with ``L9_SIGNING_KEY`` and ``L9_SIGNING_KEY_ID`` but
+        no ``L9_SIGNING_ALGORITHM`` started cleanly and then answered every
+        dispatch with a 500 (``GateDispatchConfigurationError``).
+        """
+        if isinstance(data, dict) and data.get("signing_key") and not data.get("signing_algorithm"):
+            data = {**data, "signing_algorithm": "hmac-sha256"}
+        return data
+
+    @model_validator(mode="after")
+    def validate_signing_identity(self) -> GateSettings:
+        """A key without an id, or an id without a key, fails at startup."""
+        if self.signing_key is not None and self.signing_key_id is None:
+            raise ValueError("L9_SIGNING_KEY is set but L9_SIGNING_KEY_ID is empty")
+        if self.signing_key is None and self.signing_key_id is not None:
+            raise ValueError("L9_SIGNING_KEY_ID is set but L9_SIGNING_KEY is empty")
+        return self
 
     @model_validator(mode="after")
     def validate_production_trust_boundary(self) -> GateSettings:

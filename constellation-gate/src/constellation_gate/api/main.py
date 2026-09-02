@@ -117,6 +117,8 @@ def create_app() -> FastAPI:
             packet = await service.execute(
                 body,  # nosemgrep: python.fastapi.db.generic-sql-fastapi.generic-sql-fastapi
             )
+            # Gate answers under its own identity (see deps.sign_gate_response).
+            packet = deps.sign_gate_response(packet)
             return JSONResponse(content=packet.model_dump_json_dict())
         except Exception as exc:  # noqa: BLE001
             raise to_http_exception(exc) from exc

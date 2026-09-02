@@ -192,3 +192,21 @@ def test_negative_probe_interval_and_zero_ttl_are_rejected() -> None:
         GateSettings(environment="local", local_node="gate", idempotency_ttl_seconds=0)
     with pytest.raises(ValidationError):
         GateSettings(environment="local", local_node="gate", response_margin_ms=-1)
+
+
+def test_signing_key_defaults_the_algorithm() -> None:
+    """The dispatch transport needs key + id + algorithm; the algorithm has one sane default."""
+    settings = GateSettings(
+        environment="local", local_node="gate", signing_key="material", signing_key_id="gate-k1"
+    )
+    assert settings.signing_algorithm == "hmac-sha256"
+
+
+def test_signing_key_without_id_fails_at_startup() -> None:
+    with pytest.raises(ValidationError, match="L9_SIGNING_KEY_ID is empty"):
+        GateSettings(environment="local", local_node="gate", signing_key="material")
+
+
+def test_signing_key_id_without_key_fails_at_startup() -> None:
+    with pytest.raises(ValidationError, match="L9_SIGNING_KEY is empty"):
+        GateSettings(environment="local", local_node="gate", signing_key_id="gate-k1")
