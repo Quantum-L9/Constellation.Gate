@@ -26,6 +26,10 @@ Repairs from the IB-Odoo_19 -> Gate_SDK -> Constellation.Gate -> EIE seam audit.
   every packet log line.
 
 ### Changed
+- A routed action whose owner is unhealthy answers 503 `no_healthy_node`
+  instead of 404 `not_found`; only an action Gate does not route is a 404.
+  Callers classify 404 as permanent, so a worker blip looked like a
+  missing route.
 - `/v1/execute` re-signs the response under Gate's own key when Gate signs.
   It previously relayed the worker's packet with the worker's signature, so a
   caller in a signed topology had to hold every worker's verifying key.
