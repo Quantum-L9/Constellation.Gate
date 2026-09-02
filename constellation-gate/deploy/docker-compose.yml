@@ -3,6 +3,9 @@ version: "3.9"
 services:
   gate:
     image: constellation-gate:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
     container_name: constellation-gate
     restart: unless-stopped
     command: ["sh", "/app/scripts/entrypoint.sh"]
@@ -16,10 +19,12 @@ services:
       L9_DEV_MODE: "true"
       L9_REQUIRE_SIGNATURE: "false"
       L9_REPLAY_ENABLED: "true"
+      # Pre-declare the canonical enrichment worker from the shipped registry
+      # so `converge` is routable from the first request; the worker's own
+      # registration (EIE GATE_REGISTRATION_ENABLED=true) overwrites it.
+      GATE_NODE_REGISTRY_PATH: /app/src/constellation_gate/config/node_registry.yaml
     ports:
       - "9000:9000"
-    volumes:
-      - ../:/app
     working_dir: /app
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/v1/health').read()"]

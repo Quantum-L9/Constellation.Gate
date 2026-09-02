@@ -21,7 +21,7 @@ from constellation_gate.observability.tracing import packet_trace
 from constellation_gate.resilience.backpressure import BackpressurePolicy
 from constellation_gate.resilience.circuit_breaker import CircuitBreaker
 from constellation_gate.resilience.dead_letter_queue import DeadLetterQueue
-from constellation_gate.resilience.deadline import Deadline, deadline_for_packet
+from constellation_gate.resilience.deadline import Deadline
 from constellation_gate.resilience.idempotency import IdempotencyStore, enforce_idempotency
 from constellation_gate.resilience.load_shedding import LoadSheddingPolicy
 from constellation_gate.resilience.rate_limiter import FixedWindowRateLimiter
@@ -70,6 +70,8 @@ class ExecuteService:
         dispatcher: Any,
         workflow_engine: Any,
         registry: Any,
+        idempotency_ttl_seconds: float = 86_400.0,
+        response_margin_ms: int = 0,
     ) -> None:
         self.local_node = local_node.strip().lower()
         self.ingress_validator = ingress_validator
@@ -77,7 +79,7 @@ class ExecuteService:
         self.workflow_engine = workflow_engine
         self.registry = registry
 
-        self.idempotency_store = IdempotencyStore()
+        self.idempotency_store = IdempotencyStore(ttl_seconds=idempotency_ttl_seconds)
         self.replay_guard = ReplayGuard()
         # ``retry_policy`` is a TEMPLATE, not the effective policy. It supplies
         # delay/backoff/retryable-exception shape, and its ``max_attempts`` acts
@@ -85,7 +87,7 @@ class ExecuteService:
         # effective budget per packet is resolved by the replay-safety registry
         # (ADR-GATE-007), which the ceiling can never widen.
         self.retry_policy = RetryPolicy(max_attempts=REPLAY_SAFE_MAX_ATTEMPTS)
-        self.timeout_policy = TimeoutPolicy()
+        self.timeout_policy = TimeoutPolicy(response_margin_ms=response_margin_ms)
 
         # Admission-control primitives default to effectively-unlimited so the
         # standard execution path is unchanged until an operator (or test) tunes
@@ -149,11 +151,12 @@ class ExecuteService:
 
             # ADR-GATE-008: one monotonic deadline governs routing, retry sleeps,
             # worker transport, and response validation for this packet.
+            # Both the wait and the shared deadline come from the SAME
+            # margin-adjusted budget, so a worker attempt is bounded by what
+            # Gate will actually wait for, not by the un-margined advertised
+            # value.
             timeout_seconds = self.timeout_policy.resolve(packet)
-            deadline = deadline_for_packet(
-                packet,
-                default_timeout_ms=self.timeout_policy.default_timeout_ms,
-            )
+            deadline = Deadline(timeout_seconds)
 
             async def _run() -> TransportPacket:
                 if self.workflow_engine.has_workflow(validated_packet.header.action):

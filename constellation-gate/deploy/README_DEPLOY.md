@@ -55,12 +55,29 @@ Use Terraform to provision:
 At minimum:
 
 ```text
-L9_ENVIRONMENT=production
+L9_ENVIRONMENT=prod
 GATE_LOCAL_NODE=gate
 HOST=0.0.0.0
 PORT=9000
-L9_GATE_ADMIN_TOKEN=<token>
+GATE_ADMIN_TOKEN=<token>          # required in staging/prod; startup refuses to run without it
 ```
+
+`L9_GATE_ADMIN_TOKEN` is still read as a backward-compatible alias.
+
+Routing and resilience tuning (all optional, defaults shown):
+
+```text
+GATE_NODE_REGISTRY_PATH=          # static worker registry YAML, loaded at startup
+GATE_HEALTH_PROBE_INTERVAL_SECONDS=15
+GATE_IDEMPOTENCY_TTL_SECONDS=86400
+GATE_RESPONSE_MARGIN_MS=500
+```
+
+The image is built from the repository `Dockerfile`; `docker compose -f
+deploy/docker-compose.yml up --build` builds and runs it. In `staging`/`prod`
+one ingress trust boundary must also be declared (`L9_REQUIRE_SIGNATURE=true`
+with `L9_VERIFYING_KEYS_JSON`, or `L9_TRUSTED_INGRESS_BOUNDARY=network` with
+evidence) or startup fails; see `.env.example`.
 
 Strongly recommended:
 

@@ -1,23 +1,25 @@
-nodes:
-  enrich:
-    internal_url: http://enrich:8000
-    supported_actions:
-      - enrich
-    priority_class: P2
-    max_concurrent: 20
-    health_endpoint: /v1/health
-    timeout_ms: 30000
-    metadata:
-      domain: research
-
-  cognitive_engine_graphs:
-    internal_url: http://cognitive_engine_graphs:8000
-    supported_actions:
-      - graph
-    priority_class: P2
-    max_concurrent: 20
-    health_endpoint: /v1/health
-    timeout_ms: 30000
-    metadata:
-      domain: graphs
-      repo_url: https://github.com/cryptoxdog/Cognitive.Engine.Graphs
+# Static worker registry, loaded at startup when GATE_NODE_REGISTRY_PATH points
+# here (NodeRegistry.load_from_yaml). Mapping of node_name -> NodeRegistration
+# fields. Workers that self-register through /v1/admin/register overwrite
+# their own entry; this file only guarantees the canonical rail is routable
+# from the first request.
+#
+# Every entry that claims a canonical action (see routing/action_ownership.py:
+# converge -> eie, match/sync/outcomes -> ceg) MUST carry metadata.owner, or
+# registration is refused.
+enrichment-engine:
+  internal_url: http://enrichment-engine:8000
+  supported_actions:
+    - converge
+    - graph-inference-result
+    - enrich
+    - enrich-and-sync
+  priority_class: P2
+  max_concurrent: 50
+  health_endpoint: /api/v1/health
+  # EIE's complete-operation ceiling (CANONICAL_CONVERGE_BUDGET_SECONDS = 25 s).
+  timeout_ms: 25000
+  metadata:
+    owner: eie
+    type: enrichment
+    repo_url: https://github.com/Quantum-L9/Enrichment.Inference.Engine

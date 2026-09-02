@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from constellation_gate.config.settings import GateSettings, _env_verifying_keys, get_settings
 
@@ -151,3 +152,43 @@ def test_get_settings_workflow_config_path_reads_env(monkeypatch: pytest.MonkeyP
     settings = get_settings()
     assert settings.workflow_config_path == "engine/workflows.yaml"
     get_settings.cache_clear()
+
+
+def test_default_port_matches_shipped_deployment_assets() -> None:
+    """Every deployment asset (.env.example, compose, terraform, entrypoint) uses 9000."""
+    settings = GateSettings(environment="local", local_node="gate")
+    assert settings.port == 9000
+
+
+def test_resilience_defaults() -> None:
+    settings = GateSettings(environment="local", local_node="gate")
+    assert settings.node_registry_path is None
+    assert settings.health_probe_interval_seconds == 15.0
+    assert settings.idempotency_ttl_seconds == 86_400.0
+    assert settings.response_margin_ms == 500
+
+
+def test_get_settings_reads_resilience_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("L9_ENVIRONMENT", "local")
+    monkeypatch.setenv("GATE_NODE_REGISTRY_PATH", "/etc/gate/registry.yaml")
+    monkeypatch.setenv("GATE_HEALTH_PROBE_INTERVAL_SECONDS", "2.5")
+    monkeypatch.setenv("GATE_IDEMPOTENCY_TTL_SECONDS", "600")
+    monkeypatch.setenv("GATE_RESPONSE_MARGIN_MS", "250")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+    finally:
+        get_settings.cache_clear()
+    assert settings.node_registry_path == "/etc/gate/registry.yaml"
+    assert settings.health_probe_interval_seconds == 2.5
+    assert settings.idempotency_ttl_seconds == 600.0
+    assert settings.response_margin_ms == 250
+
+
+def test_negative_probe_interval_and_zero_ttl_are_rejected() -> None:
+    with pytest.raises(ValidationError):
+        GateSettings(environment="local", local_node="gate", health_probe_interval_seconds=-1)
+    with pytest.raises(ValidationError):
+        GateSettings(environment="local", local_node="gate", idempotency_ttl_seconds=0)
+    with pytest.raises(ValidationError):
+        GateSettings(environment="local", local_node="gate", response_margin_ms=-1)

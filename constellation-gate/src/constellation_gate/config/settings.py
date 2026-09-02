@@ -63,7 +63,31 @@ class GateSettings(BaseModel):
     local_node: str = "gate"
 
     host: str = "0.0.0.0"
-    port: int = Field(default=8000, ge=1, le=65535)
+    # 9000 is the port every shipped deployment asset uses (.env.example,
+    # deploy/docker-compose.yml, deploy/terraform, scripts/entrypoint.sh). The
+    # old 8000 default here was the one outlier, and it is also the port the
+    # EIE worker listens on, so a Gate started without PORT set could collide
+    # with its own worker on a shared host.
+    port: int = Field(default=9000, ge=1, le=65535)
+
+    # Static node registry (optional). When set, the registry is loaded from
+    # this YAML at startup so a deployment can pre-declare its workers instead
+    # of depending solely on each worker's self-registration.
+    node_registry_path: str | None = None
+
+    # Health re-probe interval for registered workers. A worker that was marked
+    # unhealthy on a connection failure is re-probed at this cadence and
+    # restored to routing when its health endpoint answers 200. 0 disables.
+    health_probe_interval_seconds: float = Field(default=15.0, ge=0.0)
+
+    # Lifetime of a cached idempotent response. Bounds how long a logical
+    # operation's answer is replayed before a repeat is executed afresh.
+    idempotency_ttl_seconds: float = Field(default=86_400.0, gt=0.0)
+
+    # Slice of a packet's advertised budget Gate reserves for its own answer,
+    # so a 504 is produced BEFORE the caller's socket deadline (which the SDK
+    # sets to exactly the advertised budget) and can actually be observed.
+    response_margin_ms: int = Field(default=500, ge=0)
 
     require_signature: bool = False
     dev_mode: bool = False
@@ -223,6 +247,27 @@ class GateSettings(BaseModel):
             "authenticated boundary. Structural packet validity is not authentication."
         )
 
+    @model_validator(mode="after")
+    def validate_production_admin_token(self) -> GateSettings:
+        """Fail closed when a trust-requiring environment has no admin token.
+
+        Registration is routing authority: whoever can POST /v1/admin/register
+        decides which internal_url answers a canonical action. With no admin
+        token that endpoint is open, so any client that can reach the Gate port
+        can claim `converge` for an address it controls. The ingress boundary
+        validator runs first so its (broader) finding is the one reported when
+        both are missing.
+        """
+        if self.environment not in _TRUST_REQUIRED_ENVIRONMENTS:
+            return self
+        if not self.admin_token:
+            raise ValueError(
+                f"environment '{self.environment}' requires GATE_ADMIN_TOKEN: "
+                "/v1/admin/register is unauthenticated without it, which lets any "
+                "reachable client register itself as the owner of a canonical action"
+            )
+        return self
+
     def resolve_verifying_key(self, key_id: str | None) -> str | bytes | None:
         if key_id is None:
             return None
@@ -276,6 +321,10 @@ def get_settings() -> GateSettings:
         admin_token=admin_token,
         # BROKEN-001: optional workflow YAML path; None = workflows disabled
         workflow_config_path=os.getenv("GATE_WORKFLOW_CONFIG_PATH") or None,
+        node_registry_path=os.getenv("GATE_NODE_REGISTRY_PATH") or None,
+        health_probe_interval_seconds=float(os.getenv("GATE_HEALTH_PROBE_INTERVAL_SECONDS", "15")),
+        idempotency_ttl_seconds=float(os.getenv("GATE_IDEMPOTENCY_TTL_SECONDS", "86400")),
+        response_margin_ms=int(os.getenv("GATE_RESPONSE_MARGIN_MS", "500")),
         # ADR-GATE-012: explicit production ingress trust boundary declaration.
         trusted_ingress_boundary=os.getenv("L9_TRUSTED_INGRESS_BOUNDARY") or None,
         trusted_ingress_boundary_evidence=(

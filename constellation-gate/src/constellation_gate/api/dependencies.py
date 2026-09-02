@@ -14,6 +14,7 @@ from constellation_gate.config.settings import GateSettings, get_settings
 from constellation_gate.orchestration.workflow_engine import WorkflowEngine
 from constellation_gate.orchestration.workflow_models import WorkflowDefinition
 from constellation_gate.routing.dispatch import Dispatcher
+from constellation_gate.routing.health_monitor import HealthMonitor
 from constellation_gate.routing.node_registry import NodeRegistry
 from constellation_gate.runtime.http_client import AsyncHttpClientManager
 from constellation_gate.runtime.node_limits import PerNodeLimiterManager
@@ -29,6 +30,45 @@ logger = logging.getLogger(__name__)
 @lru_cache
 def get_registry() -> NodeRegistry:
     return NodeRegistry()
+
+
+def load_static_registry() -> int:
+    """Populate the registry from GATE_NODE_REGISTRY_PATH, if set.
+
+    Called once from the ASGI lifespan. Without it the shipped
+    ``config/node_registry.yaml`` was never read by anything: Gate started with
+    an empty registry and the canonical ``converge`` route existed only after
+    the worker's own self-registration succeeded. Returns the number of nodes
+    loaded (0 when no path is configured).
+    """
+    settings = get_gate_settings()
+    path = settings.node_registry_path
+    if not path:
+        return 0
+    registry = get_registry()
+    registry.load_from_yaml(path)
+    loaded = len(registry.snapshot())
+    logger.info("node registry loaded %d node(s) from '%s'", loaded, path)
+    return loaded
+
+
+def build_health_monitor(*, client: httpx.AsyncClient | None) -> HealthMonitor | None:
+    """Build the worker health re-probe loop, or None when disabled.
+
+    A worker is marked unhealthy on the first connection failure and, before
+    this loop ran, nothing ever marked it healthy again: routing stayed dead
+    until the worker re-registered or Gate restarted. The monitor re-probes
+    every registered node's health endpoint at the configured cadence.
+    """
+    settings = get_gate_settings()
+    interval = settings.health_probe_interval_seconds
+    if interval <= 0:
+        logger.warning(
+            "GATE_HEALTH_PROBE_INTERVAL_SECONDS is 0; a worker marked unhealthy is "
+            "only restored by its own re-registration"
+        )
+        return None
+    return HealthMonitor(get_registry(), interval_seconds=interval, client=client)
 
 
 @lru_cache
@@ -238,6 +278,8 @@ def get_execute_service() -> ExecuteService:
         dispatcher=get_dispatcher(),
         workflow_engine=get_workflow_engine(),
         registry=get_registry(),
+        idempotency_ttl_seconds=settings.idempotency_ttl_seconds,
+        response_margin_ms=settings.response_margin_ms,
     )
 
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import logging
+import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -9,6 +11,8 @@ from fastapi.responses import JSONResponse
 
 from constellation_gate.api import dependencies as deps
 from constellation_gate.api.errors import to_http_exception
+from constellation_gate.observability.context import clear_context, set_context
+from constellation_gate.observability.logging import configure_logging
 from constellation_gate.runtime.app_state import AppState
 from constellation_gate.runtime.metrics_endpoint import router as metrics_router
 from constellation_gate.runtime.routing_readiness import (
@@ -31,14 +35,47 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.runtime = state
+        # The JSON formatter is installed only when nothing else owns the root
+        # logger, so a host (or a test harness) that configured logging first
+        # keeps its handlers. Under uvicorn the root logger has none.
+        if not logging.getLogger().handlers:
+            configure_logging()
         await http_client_manager.startup()
+        deps.load_static_registry()
+        monitor = deps.build_health_monitor(client=http_client_manager.client)
+        if monitor is not None:
+            await monitor.start()
+            state.register("health_monitor", monitor)
         try:
             yield
         finally:
+            if monitor is not None:
+                await monitor.stop()
             await http_client_manager.shutdown()
 
-    app = FastAPI(title="constellation-gate", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="constellation-gate", version="1.1.0", lifespan=lifespan)
     app.include_router(metrics_router)
+
+    @app.middleware("http")
+    async def request_context(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Bind a request id to the log context for the life of the request.
+
+        Every ``log_packet_event`` line emitted while this request is in
+        flight carries ``request_id``, so a packet's ingress, dispatch and
+        completion (or failure) lines can be joined to the HTTP request that
+        carried it. The id is echoed in ``X-Request-ID``; a caller-supplied
+        one is honoured so a trace can span Odoo -> Gate -> worker.
+        """
+        request_id = (request.headers.get("x-request-id") or "").strip() or uuid.uuid4().hex
+        set_context(request_id=request_id, http_method=request.method, http_path=request.url.path)
+        try:
+            response = await call_next(request)
+        finally:
+            clear_context()
+        response.headers["X-Request-ID"] = request_id
+        return response
 
     @app.get("/v1/health")
     async def health() -> dict[str, Any]:

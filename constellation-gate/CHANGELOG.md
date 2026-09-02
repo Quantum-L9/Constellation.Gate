@@ -4,6 +4,34 @@ All notable changes to `constellation-gate` are documented here.
 
 The format follows Keep a Changelog and semantic versioning.
 
+## [1.1.0] - 2026-09-02
+
+Repairs from the IB-Odoo_19 -> Gate_SDK -> Constellation.Gate -> EIE seam audit.
+
+### Added
+- `Dockerfile` (+ `.dockerignore`); `deploy/docker-compose.yml` now carries a
+  build context. Previously the compose file named an image nothing could build.
+- Worker health re-probe loop (`HealthMonitor`) started in the ASGI lifespan,
+  cadence `GATE_HEALTH_PROBE_INTERVAL_SECONDS`. A worker marked unhealthy on a
+  connection failure is restored to routing when its health endpoint answers
+  again; before this the mark was permanent until re-registration or restart.
+- Static registry load from `GATE_NODE_REGISTRY_PATH` at startup; the shipped
+  `config/node_registry.yaml` is now in the loader's shape and pre-declares the
+  canonical enrichment worker.
+- `GATE_IDEMPOTENCY_TTL_SECONDS`: the routing-level idempotency cache expires
+  entries instead of holding them for the life of the process.
+- `GATE_RESPONSE_MARGIN_MS`: Gate reserves a slice of each packet's budget so a
+  worker timeout surfaces as Gate's 504 before the caller's socket deadline.
+- JSON logging configured at startup; `X-Request-ID` request context bound to
+  every packet log line.
+
+### Changed
+- `GATE_ADMIN_TOKEN` is required in `staging` and `prod`; startup fails closed
+  because an unauthenticated `/v1/admin/register` is routing takeover.
+- Default `PORT` is 9000, matching every shipped deployment asset.
+- Terraform `allowed_cidrs` has no world-open default and refuses `0.0.0.0/0`.
+- Deployment docs name the canonical `GATE_ADMIN_TOKEN` variable.
+
 ## [1.0.0] - 2026-04-09
 
 ### Added
