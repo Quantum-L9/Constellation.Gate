@@ -4,10 +4,18 @@
 # `docker compose up --build`, and the compose file pinned
 # `image: constellation-gate:latest`, but no Dockerfile existed anywhere in
 # the repository: nothing could build that image. This file is the build.
-FROM python:3.12-slim
+#
+# Supply chain: the base image is pinned by digest; PyPI dependencies are
+# installed from requirements.lock with `--require-hashes`; the SDK (a VCS
+# dependency, which pip cannot hash-verify) is installed separately, pinned to
+# the release commit named in Gate_SDK's RELEASE_IDENTITY_LEDGER. Both lock
+# files are regenerated with `bash scripts/lock_requirements.sh`. The package
+# runs from /app/src on PYTHONPATH; nothing is pip-installed from the tree.
+FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
@@ -18,17 +26,15 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md requirements.lock ./
+COPY requirements.lock requirements-sdk.lock ./
+RUN python -m pip install --require-hashes --no-deps -r requirements.lock \
+    && python -m pip install --no-deps -r requirements-sdk.lock \
+    && useradd --create-home --uid 10001 gate
+
+COPY pyproject.toml README.md ./
 COPY src ./src
 COPY scripts ./scripts
-
-# requirements.lock pins every resolved dependency (regenerate with
-# `uv pip compile pyproject.toml --python-version 3.12 -o requirements.lock`);
-# the package itself is then installed without re-resolving.
-RUN python -m pip install --no-deps -r requirements.lock \
-    && python -m pip install --no-deps . \
-    && useradd --create-home --uid 10001 gate \
-    && chown -R gate:gate /app
+RUN chown -R gate:gate /app
 USER gate
 
 EXPOSE 9000
