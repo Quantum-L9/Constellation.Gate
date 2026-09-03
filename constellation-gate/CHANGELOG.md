@@ -10,9 +10,9 @@ Repairs from the IB-Odoo_19 -> Gate_SDK -> Constellation.Gate -> EIE seam audit.
 
 ### Added
 - `Dockerfile` (+ `.dockerignore`): base image pinned by digest, PyPI
-  dependencies installed with `pip install --require-hashes` from
-  `requirements.lock`, the SDK git pin in `requirements-sdk.lock` (both from
-  `scripts/lock_requirements.sh`); `deploy/docker-compose.yml` now carries a
+  dependencies (the SDK included, as the hash-verified source archive of its
+  release commit) installed with `pip install --require-hashes` from
+  `requirements.lock` (`scripts/lock_requirements.sh`); `deploy/docker-compose.yml` now carries a
   build context. Previously the compose file named an image nothing could build.
 - Worker health re-probe loop (`HealthMonitor`) started in the ASGI lifespan,
   cadence `GATE_HEALTH_PROBE_INTERVAL_SECONDS`. A worker marked unhealthy on a
