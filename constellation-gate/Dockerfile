@@ -18,14 +18,16 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md requirements.lock ./
 COPY src ./src
 COPY scripts ./scripts
 
-RUN python -m pip install --upgrade pip setuptools wheel \
-    && python -m pip install .
-
-RUN useradd --create-home --uid 10001 gate \
+# requirements.lock pins every resolved dependency (regenerate with
+# `uv pip compile pyproject.toml --python-version 3.12 -o requirements.lock`);
+# the package itself is then installed without re-resolving.
+RUN python -m pip install --no-deps -r requirements.lock \
+    && python -m pip install --no-deps . \
+    && useradd --create-home --uid 10001 gate \
     && chown -R gate:gate /app
 USER gate
 

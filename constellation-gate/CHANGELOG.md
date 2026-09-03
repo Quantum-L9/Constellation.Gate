@@ -9,8 +9,9 @@ The format follows Keep a Changelog and semantic versioning.
 Repairs from the IB-Odoo_19 -> Gate_SDK -> Constellation.Gate -> EIE seam audit.
 
 ### Added
-- `Dockerfile` (+ `.dockerignore`); `deploy/docker-compose.yml` now carries a
-  build context. Previously the compose file named an image nothing could build.
+- `Dockerfile` (+ `.dockerignore`) installing from a pinned `requirements.lock`;
+  `deploy/docker-compose.yml` now carries a build context. Previously the
+  compose file named an image nothing could build.
 - Worker health re-probe loop (`HealthMonitor`) started in the ASGI lifespan,
   cadence `GATE_HEALTH_PROBE_INTERVAL_SECONDS`. A worker marked unhealthy on a
   connection failure is restored to routing when its health endpoint answers

@@ -142,5 +142,6 @@ def test_started_loop_probes_repeatedly_and_stops_cleanly() -> None:
 def test_zero_interval_is_rejected() -> None:
     import pytest
 
+    registry = NodeRegistry()
     with pytest.raises(ValueError, match="interval_seconds"):
-        HealthMonitor(NodeRegistry(), interval_seconds=0)
+        HealthMonitor(registry, interval_seconds=0)

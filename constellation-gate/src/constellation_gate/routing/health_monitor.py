@@ -82,7 +82,8 @@ class HealthMonitor:
         while not self._stop_event.is_set():
             try:
                 await self.probe_once()
-            except Exception:  # noqa: BLE001 - the loop must outlive any one probe
+            except Exception:  # noqa: BLE001
+                # The loop must outlive any one probe round.
                 logger.exception("gate.health.probe_round_failed")
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=self._interval_seconds)
@@ -100,6 +101,7 @@ class HealthMonitor:
                 return response.status_code == 200
         except httpx.HTTPError:
             return False
-        except Exception:  # noqa: BLE001 - an unexpected probe error is "not healthy", not a crash
+        except Exception:  # noqa: BLE001
+            # An unexpected probe error is "not healthy", not a crash of the loop.
             logger.exception("gate.health.probe_error url=%s", url)
             return False
