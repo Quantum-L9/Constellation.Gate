@@ -150,4 +150,3 @@ Do not run multiple Gate replicas behind a load balancer until shared state is e
 * keep registry config under version control
 * re-run startup checks
 * verify `/v1/health` and `/metrics`
-
