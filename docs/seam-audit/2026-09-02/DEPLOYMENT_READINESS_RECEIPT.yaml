@@ -1,0 +1,21 @@
+# Deployment readiness receipt — 2026-09-02 (no live production deploy was performed; separate authority required)
+verdict: REPAIRS_COMPLETE_PUBLICATION_PENDING
+local_real_process_constellation: PASS (BIDIRECTIONAL_E2E_RECEIPT.yaml)
+repository_validation:
+  - {repo: Gate_SDK, tests: "708 passed", lint: PASS, types: PASS (mypy src)}
+  - {repo: Constellation.Gate, tests: "405 passed + 18 seam_e2e passed", lint: PASS, types: PASS (mypy strict), pin: PASS}
+  - {repo: Enrichment.Inference.Engine, tests: "1611 passed (tests/integration deselected: Neo4j testcontainer suite)", lint: PASS, types: "mypy 41 pre-existing errors in untouched files; non-blocking in ci.yml; 0 in touched files", contracts: "tools/verify_contracts.py PASS", pin: PASS}
+  - {repo: Cognitive.Engine.Graphs, tests: "1774 passed (unit, contracts, invariants, architecture, gate integration)", lint: PASS, types: PASS (mypy engine), pin: PASS}
+topology_required:
+  gate: {env: [L9_ENVIRONMENT, GATE_LOCAL_NODE=gate, L9_REQUIRE_SIGNATURE=true, L9_SIGNING_KEY, L9_SIGNING_KEY_ID, L9_SIGNING_ALGORITHM, "L9_VERIFYING_KEYS_JSON (must contain every node key id)", GATE_ADMIN_TOKEN], staging_prod_rule: "GateSettings refuses staging/prod without a proven ingress trust boundary (signature + verifying keys, or L9_TRUSTED_INGRESS_BOUNDARY=network with evidence)"}
+  eie: {env: [GATE_URL, GATE_INTERNAL_URL, GATE_REGISTRATION_ENABLED=true, GATE_ADMIN_TOKEN, L9_ENVIRONMENT, L9_NODE_NAME=enrichment-engine, L9_REQUIRE_SIGNATURE=true, L9_SIGNING_KEY, L9_SIGNING_KEY_ID, "L9_VERIFYING_KEYS_JSON (must contain Gate's key id)", GRAPH_SYNC_ENTITY_TYPE, GRAPH_SYNC_ID_PROPERTY], surfaces_updated: [docker-compose.yml, infra/k8s/helm/enrichment-api/values*.yaml + templates/deployment.yaml (l9-signing-key, gate-admin-token from existingSecret), infra/k8s/kustomize/base/network-policy.yaml (egress to app=constellation-gate:8080), .env.example, docs/contracts/config/env-contract.yaml]}
+  ceg: {env: [L9_CHASSIS=sdk, GATE_URL, GATE_ADMIN_TOKEN, GATE_REGISTRATION_ENABLED=true, L9_NODE_NAME=graph, L9_NODE_SPEC_PATH, L9_ENVIRONMENT, L9_ENFORCE_GATE_ONLY_INGRESS=true, L9_GATE_NODE_NAME=gate, L9_REQUIRE_SIGNATURE=true, L9_SIGNING_KEY, L9_SIGNING_KEY_ID, "L9_VERIFYING_KEYS_JSON (must contain Gate's key id)", "L9_ALLOWED_ACTIONS without enrich", NEO4J_*], surfaces_updated: [docker-compose.yml, docker-compose.prod.yml, Makefile, .env.template, engine/spec.yaml (internal_url must be the cluster-reachable CEG address)]}
+prerequisites_unproven_here:
+  - {id: DEPLOY-03, item: "Neo4j database named after the CEG domain id (plasticos) must exist on the production Neo4j (Enterprise multi-db) — UNKNOWN"}
+  - {id: PROVIDER, item: "EIE LLM provider credentials (PERPLEXITY_API_KEY) for a non-failed enrichment domain result — not available in the audit environment"}
+  - {id: STATIC-REGISTRY, item: "whether any deployment loads Constellation.Gate config/node_registry.yaml (api/main.py does not) — UNKNOWN; dynamic registration is the proven path"}
+  - {id: NETWORK, item: "helm network policy assumes the Gate pod label app=constellation-gate and port 8080; the Gate chart/compose here listens on 9000 — align at deploy time"}
+  - {id: SDK-MERGE, item: "Gate_SDK 69c6c67 is on a feature branch; merge to main (or re-pin) before consumer merges"}
+  - {id: CI-E2E, item: "the real-process seam E2E is not a CI gate yet (needs a runner with all three checkouts + Neo4j)"}
+staging_deploy: NOT_EXECUTED (out of authority)
+production_deploy: NOT_EXECUTED (prohibited by the task)

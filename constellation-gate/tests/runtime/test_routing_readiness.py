@@ -29,8 +29,50 @@ def test_empty_registry_is_not_ready() -> None:
     assert result["problems"]
 
 
+def _registry_with_seam(*, healthy: bool = True) -> NodeRegistry:
+    registry = _registry_with_eie(healthy=healthy)
+    registry.register_node(
+        "eie",
+        NodeRegistration(
+            node_name="eie",
+            internal_url="http://eie:8000",
+            supported_actions=("converge", "graph-inference-result", "enrich", "enrich-and-sync"),
+            metadata={"owner": "eie"},
+            healthy=healthy,
+        ),
+        overwrite=True,
+    )
+    registry.register_node(
+        "graph",
+        NodeRegistration(
+            node_name="graph",
+            internal_url="http://graph:8000",
+            supported_actions=("match", "sync", "outcomes"),
+            metadata={"owner": "ceg"},
+            healthy=healthy,
+        ),
+    )
+    return registry
+
+
+def test_default_readiness_requires_the_whole_bidirectional_seam() -> None:
+    """EIE alone routes `converge` but not `sync`/`match`/`outcomes` -> not ready."""
+    eie_only = routing_readiness(_registry_with_eie())
+    assert eie_only["ready"] is False
+    missing = {entry["action"] for entry in eie_only["actions"] if not entry["routable"]}
+    assert missing == {"enrich", "enrich-and-sync", "match", "sync", "outcomes"}
+
+    both = routing_readiness(_registry_with_seam())
+    assert both["ready"] is True
+    resolved = {entry["action"]: entry["resolved_node"] for entry in both["actions"]}
+    assert resolved["converge"] == "eie"
+    assert resolved["enrich"] == "eie"
+    assert resolved["sync"] == "graph"
+    assert resolved["outcomes"] == "graph"
+
+
 def test_healthy_eie_makes_converge_routable() -> None:
-    result = routing_readiness(_registry_with_eie())
+    result = routing_readiness(_registry_with_eie(), required_actions=("converge",))
 
     assert result["ready"] is True
     converge = result["actions"][0]
@@ -41,7 +83,7 @@ def test_healthy_eie_makes_converge_routable() -> None:
 
 def test_unhealthy_eie_is_not_routable() -> None:
     """A registered-but-unhealthy worker must not read as ready."""
-    result = routing_readiness(_registry_with_eie(healthy=False))
+    result = routing_readiness(_registry_with_eie(healthy=False), required_actions=("converge",))
 
     assert result["ready"] is False
     converge = result["actions"][0]
@@ -68,7 +110,7 @@ def test_replicas_of_the_same_owner_are_routable() -> None:
         ),
     )
 
-    result = routing_readiness(registry)
+    result = routing_readiness(registry, required_actions=("converge",))
 
     assert result["ready"] is True
     assert set(result["actions"][0]["advertising_nodes"]) == {"eie", "eie-replica-2"}

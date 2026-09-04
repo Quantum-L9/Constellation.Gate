@@ -1,0 +1,17 @@
+# Version compatibility receipt — 2026-09-02
+python: "3.12 (all four repos; uv-created venvs)"
+gate_sdk:
+  package: constellation-node-sdk
+  version_string: "1.0.1 (unchanged; CHANGELOG Unreleased carries the fix)"
+  start_head_main: a0827f2b94e77a981c6d6be88653e4975cf631ef
+  final_head_branch: 69c6c67060b08440734a61473c03663423709964   # claude/gateway-seam-forensic-audit-m7cqt6 = main a0827f2 + SDK-01 fix
+  note: "previous EIE/Gate pin bfe6642 (deleted PR branch) has src/ byte-identical to a0827f2 (verified by diffing the installed wheel); CEG's a770e85 predates derive hop reset / UTC hash / gate_authority / register_node / execute()"
+pins:
+  - {repo: Enrichment.Inference.Engine, files: [pyproject.toml, requirements-ci.txt, scripts/validate_sdk_pin.py], pin: 69c6c67060b08440734a61473c03663423709964, validator: PASS}
+  - {repo: Constellation.Gate, files: [constellation-gate/pyproject.toml, scripts/validate_sdk_pin.py], pin: 69c6c67060b08440734a61473c03663423709964, validator: PASS}
+  - {repo: Cognitive.Engine.Graphs, files: [pyproject.toml, requirements.txt, poetry.lock (resolved_reference), scripts/validate_sdk_pin.py], pin: 69c6c67060b08440734a61473c03663423709964, validator: PASS}
+compatibility_proof:
+  - "Gate_SDK 69c6c67 test suite: 708 passed; ruff + mypy clean"
+  - "SDK installed into all three consumer venvs from the same commit; consumer suites green (EIE 1611, CEG 1774, Gate 405 + 18 live E2E)"
+  - "live E2E: root packet (node) -> Gate ingress -> derive -> worker runtime -> signed response -> originator, both directions, on this exact SDK"
+caveat: "69c6c67 is on the Gate_SDK feature branch; it must be merged to Gate_SDK main (or the three consumers re-pinned to the merge commit) before the consumer branches merge, otherwise CI runners resolve a branch commit"

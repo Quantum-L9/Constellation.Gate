@@ -1,12 +1,13 @@
-# Static worker registry, loaded at startup when GATE_NODE_REGISTRY_PATH points
-# here (NodeRegistry.load_from_yaml). Mapping of node_name -> NodeRegistration
-# fields. Workers that self-register through /v1/admin/register overwrite
-# their own entry; this file only guarantees the canonical rail is routable
-# from the first request.
+# Static seed topology for the EIE <-> CEG seam (seam audit 2026-09-02).
 #
-# Every entry that claims a canonical action (see routing/action_ownership.py:
-# converge -> eie, match/sync/outcomes -> ceg) MUST carry metadata.owner, or
-# registration is refused.
+# Loaded at startup when GATE_NODE_REGISTRY_PATH points here
+# (NodeRegistry.load_from_yaml). Runtime registration via POST /v1/admin/register
+# overwrites these entries. Every entry that claims a canonical action
+# (converge -> eie, match/sync/outcomes -> ceg) MUST carry metadata.owner.
+#
+# Node names MUST equal each node's runtime identity:
+#   - Enrichment.Inference.Engine registers as `enrichment-engine`
+#   - Cognitive.Engine.Graphs   registers as `graph`
 enrichment-engine:
   internal_url: http://enrichment-engine:8000
   supported_actions:
@@ -23,3 +24,19 @@ enrichment-engine:
     owner: eie
     type: enrichment
     repo_url: https://github.com/Quantum-L9/Enrichment.Inference.Engine
+
+graph:
+  internal_url: http://graph:8000
+  supported_actions:
+    - match
+    - sync
+    - outcomes
+    - resolve
+  priority_class: P1
+  max_concurrent: 100
+  health_endpoint: /v1/health
+  timeout_ms: 30000
+  metadata:
+    owner: ceg
+    type: engine
+    repo_url: https://github.com/Quantum-L9/Cognitive.Engine.Graphs

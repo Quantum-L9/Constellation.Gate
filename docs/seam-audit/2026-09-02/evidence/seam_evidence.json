@@ -1,0 +1,596 @@
+{
+  "meta": {
+    "gate_root": "/home/user/Constellation.Gate/constellation-gate",
+    "eie_root": "/home/user/Enrichment.Inference.Engine",
+    "ceg_root": "/home/user/Cognitive.Engine.Graphs",
+    "gate_url": "http://127.0.0.1:19000",
+    "eie_url": "http://127.0.0.1:19001",
+    "ceg_url": "http://127.0.0.1:19002",
+    "neo4j_uri": "bolt://127.0.0.1:7687",
+    "signature_required": true,
+    "signing_algorithm": "hmac-sha256",
+    "key_ids": {
+      "gate": "gate-e2e",
+      "eie": "eie-e2e",
+      "ceg": "ceg-e2e"
+    },
+    "secrets_in_receipt": false,
+    "gate_health": {
+      "status": "healthy",
+      "service_name": "constellation-gate",
+      "node_name": "gate",
+      "environment": "local"
+    },
+    "gate_pid": 18940,
+    "eie_pid": 18946,
+    "ceg_pid": 18965,
+    "registry_snapshot": {
+      "enrichment-engine": {
+        "node_name": "enrichment-engine",
+        "internal_url": "http://127.0.0.1:19001",
+        "supported_actions": [
+          "converge",
+          "graph-inference-result",
+          "enrich",
+          "enrich-and-sync"
+        ],
+        "priority_class": "P2",
+        "max_concurrent": 50,
+        "health_endpoint": "/api/v1/health",
+        "timeout_ms": 25000,
+        "metadata": {
+          "version": "2.3.0",
+          "type": "enrichment",
+          "generated_by": "constellation-node-sdk",
+          "owner": "eie"
+        },
+        "healthy": true,
+        "active_requests": 0
+      },
+      "graph": {
+        "node_name": "graph",
+        "internal_url": "http://127.0.0.1:19002",
+        "supported_actions": [
+          "match",
+          "sync",
+          "outcomes",
+          "resolve"
+        ],
+        "priority_class": "P1",
+        "max_concurrent": 100,
+        "health_endpoint": "/v1/health",
+        "timeout_ms": 30000,
+        "metadata": {
+          "version": "1.1.0",
+          "type": "engine",
+          "generated_by": "constellation-node-sdk"
+        },
+        "healthy": true,
+        "active_requests": 0
+      }
+    }
+  },
+  "entries": [
+    {
+      "id": "REG-01",
+      "direction": "control-plane",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:04Z",
+      "detail": "both nodes self-registered with Gate over HTTP (SDK register_node) and Gate's live registry holds their real addresses",
+      "nodes": [
+        "enrichment-engine",
+        "graph"
+      ]
+    },
+    {
+      "id": "REG-02",
+      "direction": "control-plane",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:04Z",
+      "detail": "/v1/ready is 200 with every seam action routable",
+      "ready": {
+        "ready": true,
+        "status": "ready",
+        "required_actions": [
+          "converge",
+          "enrich",
+          "enrich-and-sync",
+          "graph-inference-result",
+          "match",
+          "sync",
+          "outcomes"
+        ],
+        "actions": [
+          {
+            "action": "converge",
+            "routable": true,
+            "required_owner": "eie",
+            "resolved_node": "enrichment-engine",
+            "advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "healthy_advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "owners": {
+              "enrichment-engine": "eie"
+            },
+            "problem": null
+          },
+          {
+            "action": "enrich",
+            "routable": true,
+            "required_owner": "eie",
+            "resolved_node": "enrichment-engine",
+            "advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "healthy_advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "owners": {
+              "enrichment-engine": "eie"
+            },
+            "problem": null
+          },
+          {
+            "action": "enrich-and-sync",
+            "routable": true,
+            "required_owner": "eie",
+            "resolved_node": "enrichment-engine",
+            "advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "healthy_advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "owners": {
+              "enrichment-engine": "eie"
+            },
+            "problem": null
+          },
+          {
+            "action": "graph-inference-result",
+            "routable": true,
+            "required_owner": "eie",
+            "resolved_node": "enrichment-engine",
+            "advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "healthy_advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "owners": {
+              "enrichment-engine": "eie"
+            },
+            "problem": null
+          },
+          {
+            "action": "match",
+            "routable": true,
+            "required_owner": "ceg",
+            "resolved_node": "graph",
+            "advertising_nodes": [
+              "graph"
+            ],
+            "healthy_advertising_nodes": [
+              "graph"
+            ],
+            "owners": {
+              "graph": "ceg"
+            },
+            "problem": null
+          },
+          {
+            "action": "sync",
+            "routable": true,
+            "required_owner": "ceg",
+            "resolved_node": "graph",
+            "advertising_nodes": [
+              "graph"
+            ],
+            "healthy_advertising_nodes": [
+              "graph"
+            ],
+            "owners": {
+              "graph": "ceg"
+            },
+            "problem": null
+          },
+          {
+            "action": "outcomes",
+            "routable": true,
+            "required_owner": "ceg",
+            "resolved_node": "graph",
+            "advertising_nodes": [
+              "graph"
+            ],
+            "healthy_advertising_nodes": [
+              "graph"
+            ],
+            "owners": {
+              "graph": "ceg"
+            },
+            "problem": null
+          }
+        ],
+        "problems": []
+      }
+    },
+    {
+      "id": "A-01",
+      "direction": "EIE->Gate->CEG",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:05Z",
+      "action": "sync",
+      "detail": "EIE PacketRouter (production path) sent `sync`; Gate dispatched to CEG; CEG merged the row into Neo4j",
+      "response": {
+        "status": "success",
+        "entity_type": "facilities",
+        "synced_count": 1,
+        "packet_id": "a1471f42-ab32-4eac-9a4e-b576b5fa1078"
+      },
+      "graph_row": {
+        "labels": [
+          "Facility"
+        ],
+        "facility_id": "fac-e2e-20260902202000",
+        "polymer_type": "HDPE",
+        "enriched_by": "enrichment-engine"
+      },
+      "gate_execute_delta": 1,
+      "ceg_execute_delta": 1
+    },
+    {
+      "id": "A-02",
+      "direction": "EIE->Gate->CEG",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:06Z",
+      "action": "match",
+      "detail": "EIE GraphSyncClient.match (production path) routed by Gate to CEG; CEG answered with a match result set",
+      "response_keys": [
+        "candidates",
+        "execution_time_ms",
+        "match_direction",
+        "packet_id",
+        "packet_type",
+        "query_id",
+        "scoring_meta",
+        "total_candidates"
+      ],
+      "match_count": 0
+    },
+    {
+      "id": "A-03",
+      "direction": "EIE->Gate->CEG",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:07Z",
+      "action": "outcomes",
+      "detail": "EIE GraphSyncClient.send_outcome (production path, CEG action name `outcomes`) routed by Gate to CEG",
+      "response": {
+        "status": "recorded",
+        "outcome_id": "out_8bfe2fbf71ce",
+        "feedback": {
+          "feedback_loop": "enabled",
+          "propagation": {
+            "propagated": true,
+            "outcome_type": "success",
+            "candidates_affected": 0,
+            "factor_applied": 1.15
+          },
+          "weights_recalculated": false,
+          "drift": {
+            "divergence": 0.0,
+            "recent_dimensions": 0,
+            "baseline_dimensions": 0,
+            "status": "insufficient_data"
+          }
+        },
+        "packet_id": "e86df90b-866e-44c0-91a4-876e7ba397b3",
+        "packet_type": "response"
+      }
+    },
+    {
+      "id": "A-04",
+      "direction": "EIE->Gate->CEG",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:08Z",
+      "action": "sync",
+      "detail": "response lineage: Gate-authored provenance (origin_kind=gate, resolved_by_gate, route_kind=external_ingress, original_source_node=enrichment-engine), correlation id preserved, CEG response hop present, response signed with CEG's key id",
+      "hop_trace": [
+        [
+          "graph",
+          "response",
+          "completed"
+        ]
+      ],
+      "address": {
+        "source_node": "graph",
+        "destination_node": "gate",
+        "reply_to": "graph"
+      },
+      "provenance": {
+        "origin_kind": "gate",
+        "requested_action": "sync",
+        "resolved_by_gate": true,
+        "route_kind": "external_ingress",
+        "original_source_node": "enrichment-engine"
+      },
+      "packet_id": "8e5205b0-afb8-4133-92dc-e89152a98cbc",
+      "correlation_id": "seam-a4-20260902202000",
+      "finding": "GATE-RETURN-01: Gate relays the worker response packet to the originator unchanged; the address block is worker->gate and no Gate hop is appended on the return leg"
+    },
+    {
+      "id": "B-01",
+      "direction": "CEG->Gate->EIE",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:10Z",
+      "action": "enrich",
+      "detail": "CEG engine.gate_egress.request_enrichment (production path) sent `enrich`; Gate dispatched to EIE; EIE's enrich handler answered",
+      "transport_status": "ok",
+      "packet_type": "response",
+      "packet_id": "ae03d6b5-230c-4f2d-865e-d57e16e91c21",
+      "idempotency_key": "ceg:enrich:plasticos:fac-e2e-20260902202000:e1346145d9e55756",
+      "domain_state": "failed",
+      "domain_failure_reason": "no_valid_responses (5 errors: APIConnectionError: Connection error.; APIConnectionError: Connection error.; APIConnectionError: Connection error.)",
+      "provider_note": "no LLM provider credentials configured in this environment; domain result is reported as observed"
+    },
+    {
+      "id": "B-02",
+      "direction": "CEG->Gate->EIE",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:11Z",
+      "action": "enrich",
+      "detail": "CEG ROI health trigger (trigger_reenrichment_v2) now really dispatches through Gate to EIE instead of returning an unsent payload",
+      "triggered": true,
+      "packet_id": "a5bfa4af-f89e-46d7-9548-eb8fded7b6da",
+      "packet_type": "response"
+    },
+    {
+      "id": "F-01",
+      "direction": "EIE->Gate",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:11Z",
+      "injected": "malformed JSON body",
+      "http_status": 400,
+      "body": "{\"detail\":{\"code\":\"invalid_request\",\"message\":\"Expecting ',' delimiter: line 1 column 26 (char 25)\"}}"
+    },
+    {
+      "id": "F-02",
+      "direction": "EIE->Gate",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:12Z",
+      "injected": "structurally valid, unsigned TransportPacket",
+      "http_status": 400,
+      "body": "{\"detail\":{\"code\":\"invalid_transport_packet\",\"message\":\"signature required but not present\"}}"
+    },
+    {
+      "id": "F-03",
+      "direction": "EIE->Gate",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:12Z",
+      "injected": "action `graph-query` (no owner in Gate)",
+      "detail": "Gate answered 404 route-unavailable; EIE PacketRouter raised NodeUnreachableError without retrying a 4xx",
+      "error": "GateHTTPError",
+      "status_code": 404
+    },
+    {
+      "id": "F-04a",
+      "direction": "EIE->CEG (direct, bypassing Gate)",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:13Z",
+      "injected": "node-authored packet posted straight to CEG /v1/execute",
+      "http_status": 403,
+      "body": "{\"detail\":\"gate-only ingress: provenance.origin_kind must be 'gate', got 'node'\"}"
+    },
+    {
+      "id": "F-04b",
+      "direction": "CEG->EIE (direct, bypassing Gate)",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:14Z",
+      "injected": "node-authored, valid EnrichRequest posted straight to EIE /v1/execute",
+      "http_status": 200,
+      "refusal": "signed failure packet (HTTP 200, L9_RETURN_TRANSPORT_ERRORS)",
+      "error_payload": {
+        "status": "failed",
+        "error": "ValueError",
+        "message": "ValueError",
+        "packet_id": "6f06a0e9-c6cb-4aac-86eb-fe54685c0980"
+      },
+      "handler_executed": false,
+      "findings": [
+        "SEAM-INGRESS-01: CEG's gate-only middleware answers HTTP 403 while EIE's SDK runtime answers a signed failure packet over HTTP 200; both refuse before any handler runs",
+        "SDK-OBS-01: the SDK runtime reports a gate-only ingress rejection as a redacted 'ValueError' failure packet and writes no log line, so it is indistinguishable from a handler ValueError without a log"
+      ]
+    },
+    {
+      "id": "F-05",
+      "direction": "EIE->Gate->CEG",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:14Z",
+      "injected": "timeout_ms=1 on `sync`",
+      "detail": "one deadline derived from header.timeout_ms; the operation failed closed as observed",
+      "error": "GateTimeoutError",
+      "status_code": null,
+      "error_detail": "Gate did not respond within 0.001s (ReadTimeout)"
+    },
+    {
+      "id": "F-06",
+      "direction": "EIE->Gate->CEG",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:16Z",
+      "injected": "same idempotency key twice",
+      "detail": "second call returned the cached response packet (same packet_id)",
+      "packet_id": "f21a20a5-f72f-4ea5-af86-d0248824d524"
+    },
+    {
+      "id": "F-07",
+      "direction": "EIE->Gate->CEG",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:17Z",
+      "injected": "identical signed packet delivered twice",
+      "attempts": [
+        {
+          "ok": true,
+          "packet_id": "238223c3-37fa-47e5-b6bd-bf114b568a87",
+          "packet_type": "response"
+        },
+        {
+          "ok": true,
+          "packet_id": "238223c3-37fa-47e5-b6bd-bf114b568a87",
+          "packet_type": "response"
+        }
+      ],
+      "graph_rows": [
+        {
+          "c": 1
+        }
+      ]
+    },
+    {
+      "id": "O-01",
+      "direction": "EIE->Gate->CEG",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:19Z",
+      "injected": "CEG process stopped",
+      "detail": "EIE notify_graph_sync returned None (bounded failure, no fallback path); Gate could not reach the worker",
+      "gate_ready_http_status": 503,
+      "gate_ready_body": {
+        "ready": false,
+        "status": "not_ready",
+        "required_actions": [
+          "converge",
+          "enrich",
+          "enrich-and-sync",
+          "graph-inference-result",
+          "match",
+          "sync",
+          "outcomes"
+        ],
+        "actions": [
+          {
+            "action": "converge",
+            "routable": true,
+            "required_owner": "eie",
+            "resolved_node": "enrichment-engine",
+            "advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "healthy_advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "owners": {
+              "enrichment-engine": "eie"
+            },
+            "problem": null
+          },
+          {
+            "action": "enrich",
+            "routable": true,
+            "required_owner": "eie",
+            "resolved_node": "enrichment-engine",
+            "advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "healthy_advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "owners": {
+              "enrichment-engine": "eie"
+            },
+            "problem": null
+          },
+          {
+            "action": "enrich-and-sync",
+            "routable": true,
+            "required_owner": "eie",
+            "resolved_node": "enrichment-engine",
+            "advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "healthy_advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "owners": {
+              "enrichment-engine": "eie"
+            },
+            "problem": null
+          },
+          {
+            "action": "graph-inference-result",
+            "routable": true,
+            "required_owner": "eie",
+            "resolved_node": "enrichment-engine",
+            "advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "healthy_advertising_nodes": [
+              "enrichment-engine"
+            ],
+            "owners": {
+              "enrichment-engine": "eie"
+            },
+            "problem": null
+          },
+          {
+            "action": "match",
+            "routable": false,
+            "required_owner": "ceg",
+            "resolved_node": null,
+            "advertising_nodes": [
+              "graph"
+            ],
+            "healthy_advertising_nodes": [],
+            "owners": {
+              "graph": "ceg"
+            },
+            "problem": "no healthy node resolves 'match'"
+          },
+          {
+            "action": "sync",
+            "routable": false,
+            "required_owner": "ceg",
+            "resolved_node": null,
+            "advertising_nodes": [
+              "graph"
+            ],
+            "healthy_advertising_nodes": [],
+            "owners": {
+              "graph": "ceg"
+            },
+            "problem": "no healthy node resolves 'sync'"
+          },
+          {
+            "action": "outcomes",
+            "routable": false,
+            "required_owner": "ceg",
+            "resolved_node": null,
+            "advertising_nodes": [
+              "graph"
+            ],
+            "healthy_advertising_nodes": [],
+            "owners": {
+              "graph": "ceg"
+            },
+            "problem": "no healthy node resolves 'outcomes'"
+          }
+        ],
+        "problems": [
+          "no healthy node resolves 'match'",
+          "no healthy node resolves 'sync'",
+          "no healthy node resolves 'outcomes'"
+        ]
+      }
+    },
+    {
+      "id": "O-02",
+      "direction": "both",
+      "status": "PASS",
+      "observed_at": "2026-09-02T20:20:21Z",
+      "injected": "Gate process stopped",
+      "detail": "EIE PacketRouter retried the connection error once (idempotency key present) then raised NodeUnreachableError; CEG gate_egress reported GateConnectionError after one attempt; neither node attempted a direct peer call",
+      "eie_error": "GateConnectionError",
+      "ceg_error": "GateConnectionError"
+    }
+  ]
+}

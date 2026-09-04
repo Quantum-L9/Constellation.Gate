@@ -1,0 +1,20 @@
+# Route and capability matrix — Gate CANONICAL_ACTION_OWNERS + live registry (2026-09-02)
+seam_actions: [converge, enrich, enrich-and-sync, graph-inference-result, match, sync, outcomes]
+routes:
+  - {action: sync,                   owner: ceg, node: graph,             advertised: true,  implemented: true,  routable: true, exercised: A-01/A-04/F-06/F-07}
+  - {action: match,                  owner: ceg, node: graph,             advertised: true,  implemented: true,  routable: true, exercised: A-02}
+  - {action: outcomes,               owner: ceg, node: graph,             advertised: true,  implemented: true,  routable: true, exercised: A-03}
+  - {action: resolve,                owner: ceg (registry-only; not in CANONICAL_ACTION_OWNERS), node: graph, advertised: true, implemented: true, routable: true, exercised: NOT_EXECUTED}
+  - {action: enrich,                 owner: eie, node: enrichment-engine, advertised: true,  implemented: true,  routable: true, exercised: B-01/B-02}
+  - {action: converge,               owner: eie, node: enrichment-engine, advertised: true,  implemented: true,  routable: true, exercised: NOT_EXECUTED (Gate unit round-trip only)}
+  - {action: enrich-and-sync,        owner: eie, node: enrichment-engine, advertised: true,  implemented: true,  routable: true, exercised: NOT_EXECUTED}
+  - {action: graph-inference-result, owner: eie, node: enrichment-engine, advertised: true,  implemented: true,  routable: true, exercised: NOT_EXECUTED (no producer)}
+not_routable_by_design:
+  - {action: admin,       node: graph, reason: operator surface; accepted by CEG runtime (L9_ALLOWED_ACTIONS) but not advertised; no Gate owner}
+  - {action: health,      node: graph, reason: probe; not advertised}
+  - {action: healthcheck, node: graph, reason: probe alias; not advertised}
+  - {action: enrich (CEG local Cypher enrichment), node: graph, reason: name owned by EIE; removed from CEG L9_ALLOWED_ACTIONS and spec}
+  - {action: score-invalidate, node: UNKNOWN, reason: no owner in Gate (404); EIE sends once, fail closed; score node out of scope}
+retired: [graph-sync, outcome, graph-query, graph-traverse, graph-expand, graph-neighborhood, graph-similarity, graph-path, graph-match, graph-score, graph-rank, graph-converge, graph-arbitrate, graph-infer, graph-resolve, graph-enrich, graph-intake, graph-upsert, graph-delete, graph-feedback, graph-decay, graph-reinforce, graph-health, graph-audit, graph-explain]
+readiness: Gate /v1/ready requires every seam action to resolve to a healthy advertising node owned by the canonical owner (REG-02 200; O-01 503 when CEG stops)
+live_registry_snapshot: evidence/registry_snapshot.json

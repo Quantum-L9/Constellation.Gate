@@ -11,19 +11,46 @@ from typing import Final
 
 # TASK-002 / ACTION_REGISTRY PlasticOS authority lock.
 CANONICAL_ACTION_OWNERS: Final[dict[str, str]] = {
+    # Cognitive.Engine.Graphs (graph domain node)
     "match": "ceg",
     "sync": "ceg",
     "outcomes": "ceg",
+    # Enrichment.Inference.Engine (enrichment domain node)
     "converge": "eie",
     "graph-inference-result": "eie",
+    # `enrich` is EIE's enrichment operation (its own request/response models). CEG also has a
+    # local handler named `enrich` (Cypher property enrichment); it is deliberately
+    # NOT advertised to Gate. Without this ownership lock a CEG replica advertising
+    # `enrich` would be load-balanced against EIE for the same action name -- two
+    # incompatible domain contracts behind one route (seam audit 2026-09-02).
+    "enrich": "eie",
+    "enrich-and-sync": "eie",
 }
+
+# The complete bidirectional EIE <-> CEG collaboration action set. Readiness
+# (runtime/routing_readiness.py) and the seam architecture guard consume this;
+# it is the single place the seam's route contract is spelled out in Gate.
+SEAM_ACTIONS: Final[tuple[str, ...]] = (
+    "converge",
+    "enrich",
+    "enrich-and-sync",
+    "graph-inference-result",
+    "match",
+    "sync",
+    "outcomes",
+)
 
 _OWNER_ALIASES: Final[dict[str, str]] = {
     "ceg": "ceg",
     "cognitive": "ceg",
     "cognitive_engine_graphs": "ceg",
     "cognitive-engine-graphs": "ceg",
+    # Cognitive.Engine.Graphs registers under its runtime node name `graph`
+    # (engine/spec.yaml node.id, L9_NODE_NAME) and service name `graph-engine`.
+    "graph": "ceg",
+    "graph-engine": "ceg",
     "eie": "eie",
+    "enrich": "eie",
     "enrichment": "eie",
     "enrichment_inference_engine": "eie",
     "enrichment-inference-engine": "eie",

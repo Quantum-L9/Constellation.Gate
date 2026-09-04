@@ -33,6 +33,8 @@ GATE_REPLAY_SAFE_ACTIONS: Final[frozenset[str]] = frozenset()
 WORKER_OWNED_RETRY_ACTIONS: Final[frozenset[str]] = frozenset(
     {
         "converge",
+        "enrich",
+        "enrich-and-sync",
         "graph-inference-result",
         "match",
         "sync",

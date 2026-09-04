@@ -1,0 +1,119 @@
+# Side-door census — EIE <-> Gate <-> CEG seam forensic audit (2026-09-02)
+# A "side door" is any collaborative traffic path (request, response, callback,
+# event, retry) between EIE and CEG that does not run EIE -> Gate_SDK -> Gate -> CEG
+# (or the reverse). Dispositions are what was done, not what was intended.
+audit_date: "2026-09-02"
+method: >
+  Transitive file closure from every Gate_SDK import, peer URL setting, HTTP
+  client, message-bus producer/consumer and FastAPI route in EIE and CEG, then a
+  deep read of each candidate; confirmed only where the code could actually
+  carry traffic. Re-run after repairs by architecture guards
+  (EIE tests/architecture/test_no_bespoke_gate_transport.py,
+  CEG tests/architecture/test_seam_gate_only.py) and by live failure injection
+  (BIDIRECTIONAL_E2E_RECEIPT / FAILURE_INJECTION_RECEIPT).
+counts:
+  candidates: 12
+  confirmed_side_doors: 8
+  closed: 8
+  reachable_remaining: 0
+  not_side_doors_after_review: 4
+candidates:
+  - id: EIE-SIDE-DOOR-01
+    repo: Enrichment.Inference.Engine
+    kind: peer_url_awareness
+    location: app/core/config.py (ceg_base_url, graph_node_url, score_node_url, route_node_url, inter_node_secret); .env.example; docker-compose.yml (CEG_BASE_URL); env-contract.yaml
+    finding: CONFIRMED
+    severity: P1
+    why: EIE carried direct addresses for CEG/score/route nodes and a shared INTER_NODE_SECRET, i.e. peer routing authority outside Gate.
+    disposition: REMOVED (settings, env templates, compose, env contract); guard test_settings_carry_no_peer_url_or_shared_peer_secret
+  - id: EIE-SIDE-DOOR-02
+    repo: Enrichment.Inference.Engine
+    kind: raw_peer_http_client
+    location: chassis/node_client.py
+    finding: CONFIRMED
+    severity: P1
+    why: hand-rolled httpx client that POSTed dict envelopes straight to peer /v1/execute using the peer URL settings.
+    disposition: DELETED; guard test_retired_side_door_modules_stay_deleted + test_no_raw_http_post_to_execute_outside_sdk
+  - id: EIE-SIDE-DOOR-03
+    repo: Enrichment.Inference.Engine
+    kind: message_bus_peer_channel
+    location: app/services/workers/graph_inference_consumer.py (Redis stream consumer for graph inference results)
+    finding: CONFIRMED
+    severity: P2
+    why: a node-to-node result channel over Redis with no Gate in the path (and no CEG producer anywhere).
+    disposition: DELETED; worker package export removed; guard test_retired_side_door_modules_stay_deleted
+  - id: EIE-SIDE-DOOR-04
+    repo: Enrichment.Inference.Engine
+    kind: direct_peer_ingress_route
+    location: app/api/v1/chassis_endpoint.py POST /v1/outcomes
+    finding: CONFIRMED
+    severity: P1
+    why: a FastAPI route accepting match-outcome feedback from a peer outside the SDK worker runtime (no Gate provenance, no packet).
+    disposition: REMOVED (router left empty with retirement note); OpenAPI + contract docs updated; guard test_no_peer_ingress_routes_outside_sdk_runtime
+  - id: EIE-SIDE-DOOR-05
+    repo: Enrichment.Inference.Engine
+    kind: duplicate_transport_path
+    location: app/services/graph_sync_hooks.py
+    finding: CONFIRMED
+    severity: P2
+    why: a second graph-sync implementation beside PacketRouter, unowned and untested; two paths for one seam invite drift.
+    disposition: DELETED; module-reachability baseline updated
+  - id: EIE-SIDE-DOOR-06
+    repo: Enrichment.Inference.Engine
+    kind: direct_datastore_access
+    location: pyproject.toml neo4j dependency; Settings.neo4j_*; docs/contracts/dependencies/neo4j.yaml; helm/env templates
+    finding: CONFIRMED
+    severity: P2
+    why: a graph-store driver dependency in the enrichment node lets EIE reach CEG's graph without Gate; unused in code but declared, configured and documented.
+    disposition: REMOVED (dependency, settings, contract doc replaced by constellation-gate.yaml, env templates); guard in tests/contracts/test_dependency_contracts.py
+  - id: CEG-SIDE-DOOR-01
+    repo: Cognitive.Engine.Graphs
+    kind: direct_peer_ingress_chassis
+    location: chassis/chassis_app.py (legacy dict ExecuteRequest chassis, api-key auth, no Gate provenance); chassis/entrypoint.py default `legacy`; settings.require_sdk_chassis_in_prod=False
+    finding: CONFIRMED
+    severity: P1
+    why: the default chassis accepted {action, tenant, payload} from anyone with an api key; Gate could not dispatch TransportPackets to it and any peer could bypass Gate.
+    disposition: SEALED — SDK chassis is the default; legacy refused at startup outside dev/local/test; require_sdk_chassis_in_prod=True; compose/Makefile/.env select sdk; guards test_sdk_chassis_is_default_and_legacy_is_dev_only + test_deployment_surfaces_select_sdk_chassis
+  - id: CEG-SIDE-DOOR-02
+    repo: Cognitive.Engine.Graphs
+    kind: unrouted_dormant_egress
+    location: engine/gate_client.py (never called), engine/health/enrichment_trigger.py (built a payload, never sent), engine/health/api.py (handler not registered)
+    finding: "CONFIRMED (absence of the sanctioned path is itself the defect: the only conceivable way to reach EIE was outside Gate)"
+    severity: P1
+    why: the CEG -> EIE direction had no Gate path at all.
+    disposition: REPAIRED — engine/gate_egress.request_enrichment via the SDK GateClient singleton; trigger wired; guard test_reverse_path_is_wired_through_gate_egress
+  - id: EIE-CAND-07
+    repo: Enrichment.Inference.Engine
+    kind: message_bus_event
+    location: app/services/event_emitter.py (Redis stream enrich:events:{tenant})
+    finding: NOT_A_SIDE_DOOR
+    severity: P3
+    why: an EIE-local event stream; no CEG consumer exists in either repo. Informational; would become a side door only if CEG subscribed.
+    disposition: LEFT (documented as an EIE-internal event surface)
+  - id: EIE-CAND-08
+    repo: Enrichment.Inference.Engine
+    kind: fire_and_forget_egress_to_non_seam_node
+    location: app/engines/packet_router.py notify_score_invalidate (action score-invalidate)
+    finding: NOT_A_SIDE_DOOR (goes through Gate); route owner UNKNOWN
+    severity: P3
+    why: addressed to Gate, but no node owns `score-invalidate` in Gate's ownership map, so Gate answers 404 and the call is a bounded no-op.
+    disposition: LEFT as Gate-routed, single attempt, fail closed; recorded as unresolved UNKNOWN (score node out of audit scope)
+  - id: CEG-CAND-09
+    repo: Cognitive.Engine.Graphs
+    kind: packet_construction_helper
+    location: engine/packet_bridge.py build_request_packet (destination defaults to gate), engine/packet/bridge.py + chassis_contract.py (self-addressed audit reconstructions)
+    finding: NOT_A_SIDE_DOOR
+    severity: P3
+    why: default destination is Gate; the other two construct packets addressed to the node itself for the audit store and never send them.
+    disposition: LEFT; guard test_every_authored_transport_packet_targets_gate tolerates only Gate or self as destination
+  - id: GATE-CAND-10
+    repo: Constellation.Gate
+    kind: static_registry_file
+    location: src/constellation_gate/config/node_registry.yaml
+    finding: NOT_A_SIDE_DOOR (stale documentation of routes; not loaded by api/main.py)
+    severity: P3
+    why: stale node names could not route traffic anywhere; live routing comes from dynamic registration.
+    disposition: REWRITTEN to the real node names/actions; whether any deployment loads it is UNKNOWN (scripts/migrate_registry.py exists; predeploy_check only asserts the file exists)
+final_proof:
+  guards: [EIE tests/architecture/test_no_bespoke_gate_transport.py (17 tests), CEG tests/architecture/test_seam_gate_only.py (16 tests), Gate tests/architecture/test_seam_route_contract.py]
+  live_injection: [F-04a direct EIE->CEG refused (HTTP 403), F-04b direct CEG->EIE refused (signed failure packet, handler not executed), O-02 Gate down -> both nodes fail closed with no peer attempt]

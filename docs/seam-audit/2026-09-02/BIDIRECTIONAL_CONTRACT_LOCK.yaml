@@ -1,0 +1,38 @@
+# Bidirectional contract lock — EIE <-> Gate <-> CEG (2026-09-02)
+# Locked by: Gate_SDK 69c6c67 (packet model), Constellation.Gate action_ownership.SEAM_ACTIONS,
+# EIE tests/architecture/test_no_bespoke_gate_transport.py, CEG tests/architecture/test_seam_gate_only.py,
+# Gate tests/architecture/test_seam_route_contract.py, and the live E2E (BIDIRECTIONAL_E2E_RECEIPT.yaml).
+wire_format: TransportPacket (constellation_node_sdk.transport) — the only wire format; no dict envelopes, no PacketEnvelope on the wire.
+routing_authority: Constellation.Gate — nodes address `gate` only; Gate resolves the owner from CANONICAL_ACTION_OWNERS + live registry.
+identity:
+  eie: {node_name: enrichment-engine, owner: eie, health: /api/v1/health, ingress: SDK runtime POST /v1/execute (gate-only, signature required outside dev_mode)}
+  ceg: {node_name: graph, owner: ceg, health: /v1/health, ingress: SDK chassis POST /v1/execute + gate-only middleware (403 on non-Gate provenance)}
+  gate: {node_name: gate, ingress: POST /v1/execute, control_plane: POST /v1/admin/register (X-Admin-Token), probes: GET /v1/health, GET /v1/ready, GET /v1/registry}
+directions:
+  eie_to_ceg:
+    transport: EIE app/services/gate_client.py -> GateClient.execute()/send_to_gate() -> Gate /v1/execute -> gate_authority dispatch -> CEG /v1/execute
+    callers: {sync: app/engines/packet_router.py PacketRouter.notify_graph_sync, match: app/engines/graph_sync_client.py GraphSyncClient.match, outcomes: GraphSyncClient.send_outcome, sync(batch): GraphSyncClient.sync_entities}
+    actions: [sync, match, outcomes]
+    resolve: advertised by CEG, no EIE caller today (UNUSED)
+  ceg_to_eie:
+    transport: CEG engine/gate_client.py singleton -> GateClient.execute() -> Gate /v1/execute -> gate_authority dispatch -> EIE /v1/execute
+    callers: {enrich: engine/gate_egress.py request_enrichment (called by engine/health/enrichment_trigger.trigger_reenrichment_v2)}
+    actions: [enrich]
+    converge / enrich-and-sync / graph-inference-result: EIE-owned, advertised, no CEG caller today (converge is driven by external producers such as Odoo; graph-inference-result has no producer anywhere)
+packet_rules:
+  - every node-authored packet: destination_node=gate, source_node=<own node_name>, reply_to=<own node_name>, provenance.origin_kind=node, resolved_by_gate=false, signed with the node's key id
+  - "Gate-derived child packet: source_node=gate, reply_to=gate, destination=<owner node>, provenance {origin_kind: gate, resolved_by_gate: true, route_kind: external_ingress, original_source_node: <originator>}, timeout_ms = bounded remaining budget, signed with Gate's key id"
+  - worker response: packet_type response|failure, address worker->gate, lineage.parent_id = child packet id, signed with the worker's key id; Gate returns it to the originator unchanged (GATE-RETURN-01)
+  - originators must not read address.* to reach a peer; the only peer address any node knows is GATE_URL
+security:
+  signing_algorithm: hmac-sha256 (ed25519 supported by SDK; not exercised)
+  node_signing: "L9_SIGNING_KEY + L9_SIGNING_KEY_ID; Gate verifies via L9_VERIFYING_KEYS_JSON {key_id: key}"
+  gate_signing: L9_SIGNING_KEY + L9_SIGNING_KEY_ID on Gate; nodes verify via L9_VERIFYING_KEYS_JSON (SDK-01 fix required for env-configured nodes)
+  registration: X-Admin-Token == GATE_ADMIN_TOKEN; overwrite=true on restart
+  unsigned_packet_to_gate: rejected 400 invalid_transport_packet (F-02)
+  direct_peer_call: refused (F-04a 403, F-04b signed failure packet, handler not executed)
+deadline_retry_idempotency:
+  deadline: one budget per logical operation = header.timeout_ms; SDK derives the socket deadline from it; Gate derives the child budget as bounded remaining time (INV-GATE-DOWNSTREAM-DEADLINE-IDENTITY); F-05 shows timeout_ms=1 fails closed as GateTimeoutError
+  retry: SDK never retries; Gate replay policy default 1 attempt; EIE PacketRouter max 2 attempts only for connection errors or (timeout/5xx with idempotency key), never 4xx; CEG gate_egress 1 attempt
+  idempotency: Gate caches terminal successes per (tenant, action, key) — F-06 same packet_id on duplicate key; failures are not cached (GATE-03); replayed identical packet is served from cache and not re-executed (F-07, one Neo4j row)
+tenant: TransportPacket.tenant.org_id == CEG domain id (== Neo4j database name for CEG); EIE receives it as the `tenant` handler argument

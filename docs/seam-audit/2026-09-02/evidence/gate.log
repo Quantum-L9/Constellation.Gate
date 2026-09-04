@@ -1,0 +1,234 @@
+INFO:     Started server process [18940]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:19000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:48292 - "GET /v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48302 - "POST /v1/admin/register?overwrite=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48308 - "POST /v1/admin/register?overwrite=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48324 - "GET /v1/registry HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48328 - "GET /v1/ready HTTP/1.1" 200 OK
+GATE_WORKFLOW_CONFIG_PATH is not set; workflow engine is active but has no definitions. Packets routed to workflow actions will fall through to direct dispatch.
+INFO:     127.0.0.1:48342 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48350 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48360 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42300 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42316 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42326 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42338 - "POST /v1/execute HTTP/1.1" 400 Bad Request
+gate.failure
+Traceback (most recent call last):
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/boundary/ingress_validator.py", line 76, in validate
+    validate_transport_packet(
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/constellation_node_sdk/security/validation.py", line 160, in validate_transport_packet
+    raise TransportAuthenticationError("signature required but not present")
+constellation_node_sdk.transport.errors.TransportAuthenticationError: signature required but not present
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 126, in execute
+    packet = self._validate(body)
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 325, in _validate
+    packet = validator.validate(body)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/boundary/ingress_validator.py", line 104, in validate
+    raise IngressValidationError(str(exc)) from exc
+constellation_gate.boundary.ingress_validator.IngressValidationError: signature required but not present
+INFO:     127.0.0.1:42340 - "POST /v1/execute HTTP/1.1" 400 Bad Request
+gate.failure
+Traceback (most recent call last):
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 188, in execute
+    result = await asyncio.wait_for(
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/resilience/retry_policy.py", line 77, in run
+    return await func()
+           ^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 177, in _run
+    result = await self._run_dispatch(validated_packet, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 279, in _run_dispatch
+    result = await self._call_with_optional_deadline(self.dispatcher.dispatch, packet, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 318, in _call_with_optional_deadline
+    return await func(packet, deadline=deadline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/dispatch.py", line 80, in dispatch
+    target = self._resolver.resolve(packet)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/resolver.py", line 27, in resolve
+    return self._resolve_gate_bound(packet)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/resolver.py", line 40, in _resolve_gate_bound
+    return self._registry.resolve_action(action)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/node_registry.py", line 170, in resolve_action
+    raise LookupError(f"no healthy node registered for action: {normalized_action}")
+LookupError: no healthy node registered for action: graph-query
+INFO:     127.0.0.1:42344 - "POST /v1/execute HTTP/1.1" 404 Not Found
+gate.failure
+Traceback (most recent call last):
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 188, in execute
+    result = await asyncio.wait_for(
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/resilience/retry_policy.py", line 77, in run
+    return await func()
+           ^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 177, in _run
+    result = await self._run_dispatch(validated_packet, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 279, in _run_dispatch
+    result = await self._call_with_optional_deadline(self.dispatcher.dispatch, packet, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 318, in _call_with_optional_deadline
+    return await func(packet, deadline=deadline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/dispatch.py", line 84, in dispatch
+    worker_budget_ms = self._worker_budget_ms(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/dispatch.py", line 248, in _worker_budget_ms
+    raise DeadlineExceeded(f"remaining budget for worker dispatch rounds to {budget_ms}ms")
+constellation_gate.resilience.deadline.DeadlineExceeded: remaining budget for worker dispatch rounds to 0ms
+INFO:     127.0.0.1:42360 - "POST /v1/execute HTTP/1.1" 504 Gateway Timeout
+INFO:     127.0.0.1:42374 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42382 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42398 - "POST /v1/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42412 - "POST /v1/execute HTTP/1.1" 200 OK
+gate.failure
+Traceback (most recent call last):
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_transports/default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpcore/_async/connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpcore/_async/connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpcore/_async/connection.py", line 101, in handle_async_request
+    raise exc
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpcore/_async/connection.py", line 78, in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpcore/_async/connection.py", line 124, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpcore/_backends/auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpcore/_backends/anyio.py", line 113, in connect_tcp
+    with map_exceptions(exc_map):
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/constellation_node_sdk/_packet_http.py", line 87, in post_packet_json
+    return await client.post(
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_client.py", line 1859, in post
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_transports/default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 188, in execute
+    result = await asyncio.wait_for(
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/resilience/retry_policy.py", line 77, in run
+    return await func()
+           ^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 177, in _run
+    result = await self._run_dispatch(validated_packet, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 279, in _run_dispatch
+    result = await self._call_with_optional_deadline(self.dispatcher.dispatch, packet, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 318, in _call_with_optional_deadline
+    return await func(packet, deadline=deadline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/dispatch.py", line 159, in dispatch
+    return await self._resolve_transport().send_gate_authored_packet(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/constellation_node_sdk/gate_authority/dispatch.py", line 201, in send_gate_authored_packet
+    response = await post_packet_json(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/.venv/lib/python3.12/site-packages/constellation_node_sdk/_packet_http.py", line 109, in post_packet_json
+    raise errors.connection(
+constellation_node_sdk.gate_authority.errors.WorkerConnectionError: could not reach worker 'graph' at http://127.0.0.1:19002/v1/execute (ConnectError: All connection attempts failed)
+INFO:     127.0.0.1:42424 - "POST /v1/execute HTTP/1.1" 502 Bad Gateway
+gate.failure
+Traceback (most recent call last):
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 188, in execute
+    result = await asyncio.wait_for(
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/resilience/retry_policy.py", line 77, in run
+    return await func()
+           ^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 177, in _run
+    result = await self._run_dispatch(validated_packet, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 279, in _run_dispatch
+    result = await self._call_with_optional_deadline(self.dispatcher.dispatch, packet, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/services/execute_service.py", line 318, in _call_with_optional_deadline
+    return await func(packet, deadline=deadline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/dispatch.py", line 80, in dispatch
+    target = self._resolver.resolve(packet)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/resolver.py", line 27, in resolve
+    return self._resolve_gate_bound(packet)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/resolver.py", line 40, in _resolve_gate_bound
+    return self._registry.resolve_action(action)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/Constellation.Gate/constellation-gate/src/constellation_gate/routing/node_registry.py", line 170, in resolve_action
+    raise LookupError(f"no healthy node registered for action: {normalized_action}")
+LookupError: no healthy node registered for action: sync
+INFO:     127.0.0.1:53952 - "POST /v1/execute HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53956 - "GET /v1/ready HTTP/1.1" 503 Service Unavailable
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [18940]

@@ -1,0 +1,78 @@
+# Request contract matrix (payload = TransportPacket.payload) — locked 2026-09-02
+requests:
+  - action: sync
+    direction: EIE -> Gate -> CEG
+    owner: ceg
+    producer: EIE app/engines/packet_router.py (_graph_sync_row) and app/engines/graph_sync_client.py sync_entities
+    consumer: CEG engine/handlers.py handle_sync
+    payload:
+      entity_type: "string — must match a CEG domain sync endpoint leaf (plasticos: facilities | polymerfamilies | materialforms | supply-opportunities | buyer-demands); EIE default GRAPH_SYNC_ENTITY_TYPE=facilities"
+      batch: "non-empty list of rows; each row must carry the endpoint id property (plasticos facilities: facility_id) — EIE also sets entity_id, domain, enriched_by=enrichment-engine; values are Neo4j primitives (nested values JSON-encoded by EIE)"
+    idempotency_key: "eie:sync:{tenant}:{entity_id}:{sha256(row)[:16]}"
+    timeout_ms: 10000 (PacketRouter) / 30000 (GraphSyncClient)
+    proven: A-01, A-04, F-06, F-07
+  - action: match
+    direction: EIE -> Gate -> CEG
+    owner: ceg
+    producer: EIE GraphSyncClient.match
+    consumer: CEG handle_match
+    payload:
+      query: "object of domain query fields (plasticos: polymer_type required; density, mfi, contamination_pct, requires_food_grade, volume_tons, lat, lon, target_price, requires_active_supply optional)"
+      match_direction: "one of the domain matchdirections (plasticos: supply_opportunity_to_buyer_facility | buyer_demand_to_supply_opportunity)"
+      top_n: "int 1..1000 (default 10)"
+      weights: "optional {dimension: 0..1}, sum <= 1.0 when score_clamp_enabled"
+    idempotency_key: none (read)
+    proven: A-02
+  - action: outcomes
+    direction: EIE -> Gate -> CEG
+    owner: ceg
+    producer: EIE GraphSyncClient.send_outcome
+    consumer: CEG handle_outcomes
+    payload:
+      match_id: string (required)
+      candidate_id: string (required)
+      outcome: "success | failure | partial (required)"
+    idempotency_key: caller-supplied optional
+    proven: A-03
+  - action: resolve
+    direction: EIE -> Gate -> CEG (advertised; no EIE caller)
+    owner: ceg
+    consumer: CEG handle_resolve
+    payload: "UNKNOWN — not exercised by any seam producer; contract not locked"
+    proven: NOT_EXECUTED
+  - action: enrich
+    direction: CEG -> Gate -> EIE
+    owner: eie
+    producer: CEG engine/gate_egress.py build_enrichment_request
+    consumer: EIE app/engines/handlers.py handle_enrich (EnrichRequest.model_validate)
+    payload:
+      entity: "record fields (CEG sends {entity_id, domain, ...extra})"
+      object_type: "string (CEG sends the domain id)"
+      schema: "{field_name: type} (CEG sends {field: 'string'} for each target field)"
+      objective: "natural-language instruction (required)"
+      kb_context: "KB profile selector (CEG sends the domain id)"
+      consensus_threshold: "optional 0..1 (default 0.65)"
+      max_variations: "optional 1..10 (default 5)"
+      idempotency_key: "optional (transport key is set separately on the packet)"
+    idempotency_key: "ceg:enrich:{tenant}:{entity_id}:{sha256(tenant|entity|sorted fields)[:16]}"
+    timeout_ms: 25000 (DEFAULT_ENRICH_TIMEOUT_MS)
+    proven: B-01, B-02
+  - action: converge
+    direction: external producer (e.g. Odoo) -> Gate -> EIE
+    owner: eie
+    payload: "EnrichRequest-shaped canonical contract (see EIE handle_converge); not CEG traffic"
+    proven: NOT_EXECUTED in this seam (Gate unit test test_cross_repo_converge_round_trip covers it)
+  - action: enrich-and-sync
+    direction: external -> Gate -> EIE
+    owner: eie
+    payload: "EnrichRequest + graph sync side effect; no CEG producer"
+    proven: NOT_EXECUTED
+  - action: graph-inference-result
+    direction: (intended) CEG -> Gate -> EIE
+    owner: eie
+    payload: "UNKNOWN — no producer exists in CEG; dormant"
+    proven: NOT_EXECUTED
+retired_request_names:
+  graph-sync: "unowned; replaced by sync"
+  outcome: "replaced by outcomes"
+  graph-*: "23 CEG spec names removed; never implemented"

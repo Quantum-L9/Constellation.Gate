@@ -1,0 +1,26 @@
+# Bidirectional real-process E2E receipt — 2026-09-02
+harness: Constellation.Gate/constellation-gate/tests/e2e/seam (marker seam_e2e; skips when sibling checkouts/venvs are absent)
+run: "pytest tests/e2e/seam -q  ->  18 passed in 21.47s (last run; three earlier runs surfaced SDK-01 and GATE-RETURN-01)"
+nothing_mocked: true
+processes:
+  gate: {cmd: "uvicorn constellation_gate.api.main:app", venv: Constellation.Gate/constellation-gate/.venv, url: "http://127.0.0.1:19000", env: "L9_ENVIRONMENT=local, L9_DEV_MODE=false, L9_REQUIRE_SIGNATURE=true, hmac-sha256, L9_VERIFYING_KEYS_JSON={gate-e2e, eie-e2e, ceg-e2e}, GATE_ADMIN_TOKEN=<random per session>"}
+  eie:  {cmd: "uvicorn app.main:app", venv: Enrichment.Inference.Engine/.venv, url: "http://127.0.0.1:19001", registration: "SDK register_node -> POST /v1/admin/register 200", env: "GATE_URL, GATE_INTERNAL_URL, L9_NODE_NAME=enrichment-engine, L9_REQUIRE_SIGNATURE=true, key id eie-e2e, no LLM provider credentials"}
+  ceg:  {cmd: "uvicorn chassis.entrypoint:create_app --factory (L9_CHASSIS=sdk)", venv: Cognitive.Engine.Graphs/.venv, url: "http://127.0.0.1:19002", registration: "SDK register_from_env (engine/spec.yaml with internal_url rewritten to the session port) -> 200", env: "L9_NODE_NAME=graph, gate-only ingress, L9_REQUIRE_SIGNATURE=true, key id ceg-e2e, NEO4J_URI=bolt://127.0.0.1:7687"}
+  neo4j: {version: "5.26.0 Community, real server in this container", database: "plasticos (initial.dbms.default_database), i.e. CEG's domain id"}
+secrets: generated per session, passed only via process environment, absent from the evidence file and logs (verified by grep)
+evidence_files: [evidence/seam_evidence.json, evidence/registry_snapshot.json, evidence/gate.log, evidence/eie.log, evidence/ceg.log]
+control_plane:
+  REG-01: {status: PASS, detail: "both nodes self-registered; Gate registry holds http://127.0.0.1:19001 (enrichment-engine: converge, graph-inference-result, enrich, enrich-and-sync; owner eie) and http://127.0.0.1:19002 (graph: match, sync, outcomes, resolve; owner resolved from node name)"}
+  REG-02: {status: PASS, detail: "/v1/ready 200 ready=true for all seven seam actions"}
+eie_to_ceg:
+  A-01: {status: PASS, action: sync, originator: "EIE process (PacketRouter.notify_graph_sync, production path)", gate: "POST /v1/execute 200 (+1 in gate.log)", ceg: "POST /v1/execute 200 (+1 in ceg.log); audit 'Sync facilities batch_size=1' outcome=success", persisted: "Neo4j (:Facility {facility_id: fac-e2e-20260902202000, polymer_type: HDPE, enriched_by: enrichment-engine})", response: '{"status":"success","entity_type":"facilities","synced_count":1}'}
+  A-02: {status: PASS, action: match, originator: "EIE GraphSyncClient.match", response_keys: [candidates, execution_time_ms, match_direction, query_id, scoring_meta, total_candidates], note: "0 candidates on a near-empty graph; transport + handler proven"}
+  A-03: {status: PASS, action: outcomes, originator: "EIE GraphSyncClient.send_outcome", response: "status=recorded, outcome_id=out_8bfe2fbf71ce, feedback propagation applied"}
+  A-04: {status: PASS, action: sync, evidence: "response provenance {origin_kind: gate, resolved_by_gate: true, route_kind: external_ingress, original_source_node: enrichment-engine}; correlation id preserved; hop (graph, response, completed); signature key id ceg-e2e", finding: GATE-RETURN-01}
+ceg_to_eie:
+  B-01: {status: PASS, action: enrich, originator: "CEG process (engine.gate_egress.request_enrichment, production path)", gate: "+1 POST /v1/execute", eie: "+1 POST /v1/execute; enrich handler ran (pipeline_started in eie.log)", transport: "ok, packet_type=response, idempotency key ceg:enrich:plasticos:<entity>:<hash>", domain_result: "state=failed, failure_reason=no_valid_responses (APIConnectionError x5) — no LLM provider credentials in this environment; reported as observed, not as PASS of enrichment"}
+  B-02: {status: PASS, action: enrich, originator: "CEG trigger_reenrichment_v2 (ROI recommendation enrich_now)", result: "triggered=true, dispatch packet_type=response via Gate"}
+status:
+  EIE_to_Graphs_E2E: PASS (transport, routing, signing, persistence)
+  Graphs_to_EIE_E2E: PASS (transport, routing, signing, handler execution); enrichment domain outcome NOT_PROVEN (provider absent)
+not_executed: [resolve, converge, enrich-and-sync, graph-inference-result — no seam producer; see ROUTE_AND_CAPABILITY_MATRIX.yaml]

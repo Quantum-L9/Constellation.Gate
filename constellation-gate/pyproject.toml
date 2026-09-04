@@ -16,7 +16,11 @@ dependencies = [
   # constellation-node-sdk is not published to PyPI; it lives in the sibling
   # Quantum-L9/Gate_SDK repository. Pin an exact commit so clean CI runners and
   # pre-commit hook environments resolve the same canonical transport contract.
-  "constellation-node-sdk @ git+https://github.com/Quantum-L9/Gate_SDK.git@2b2f53a28a59bbfb2fa45f5eac32b722d802209a",
+  # 69c6c67 = Gate_SDK main a0827f2 (src/ byte-identical to the previously
+  # pinned PR head bfe6642, verified 2026-09-02) plus the GateClientConfig fix
+  # that loads L9_VERIFYING_KEYS_JSON from the environment. EIE and CEG pin the
+  # same commit (VERSION_COMPATIBILITY_RECEIPT.yaml, seam audit 2026-09-02).
+  "constellation-node-sdk @ git+https://github.com/Quantum-L9/Gate_SDK.git@69c6c67060b08440734a61473c03663423709964",
   "fastapi>=0.115.0",
   "httpx>=0.27.0",
   "pydantic>=2.8.0",
@@ -46,6 +50,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+  "seam_e2e: real-process EIE <-> Gate <-> CEG end-to-end (needs sibling checkouts + Neo4j; skips otherwise)",
+]
 
 [tool.ruff]
 line-length = 100
@@ -59,6 +66,10 @@ select = [
   "UP",
   "B",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Cross-repo E2E drivers embed peer-side scripts and long assertion messages.
+"tests/e2e/seam/*" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"
