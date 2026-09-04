@@ -7,6 +7,8 @@ from typing import Any
 
 from constellation_node_sdk.transport.packet import TransportPacket
 
+from constellation_gate.observability.context import get_context
+
 
 class JsonLogFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -48,7 +50,10 @@ def packet_log_context(packet: TransportPacket) -> dict[str, Any]:
 def log_packet_event(
     logger: logging.Logger, *, event: str, packet: TransportPacket, **extra: Any
 ) -> None:
-    context = packet_log_context(packet)
+    # Request-scoped context (request_id, http path) first, so packet fields
+    # and per-call extras win on a key collision.
+    context = get_context()
+    context.update(packet_log_context(packet))
     context.update(extra)
     logger.info(
         event,

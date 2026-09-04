@@ -14,6 +14,7 @@ from constellation_gate.resilience.backpressure import BackpressureExceededError
 from constellation_gate.resilience.circuit_breaker import CircuitBreakerOpenError
 from constellation_gate.resilience.load_shedding import LoadShedError
 from constellation_gate.resilience.rate_limiter import RateLimitExceededError
+from constellation_gate.routing.node_registry import NoHealthyNodeError
 
 # Gate's own faults answer with a fixed, uninformative body on purpose: an
 # internal defect must not leak Gate's internals to a caller who cannot act on
@@ -68,6 +69,15 @@ def to_http_exception(exc: Exception) -> HTTPException:
             status_code=401,
             detail={
                 "code": "admin_auth_failed",
+                "message": str(exc),
+            },
+        )
+
+    if isinstance(exc, NoHealthyNodeError):
+        return HTTPException(
+            status_code=503,
+            detail={
+                "code": "no_healthy_node",
                 "message": str(exc),
             },
         )

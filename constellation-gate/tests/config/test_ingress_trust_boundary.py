@@ -14,7 +14,7 @@ from constellation_gate.config.settings import GateSettings
 
 
 def _settings(**overrides) -> GateSettings:
-    base = {"environment": "prod", "local_node": "gate"}
+    base = {"environment": "prod", "local_node": "gate", "admin_token": "admin-secret"}
     return GateSettings(**{**base, **overrides})
 
 
@@ -78,3 +78,27 @@ def test_network_boundary_declaration_does_not_leak_into_signature_config() -> N
         trusted_ingress_boundary_evidence="private ingress only",
     )
     assert settings.require_signature is False
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_trust_requiring_environment_requires_admin_token(environment: str) -> None:
+    """A satisfied ingress boundary is not enough: registration is routing authority."""
+    with pytest.raises(ValidationError, match="requires GATE_ADMIN_TOKEN"):
+        _settings(
+            environment=environment,
+            admin_token=None,
+            require_signature=True,
+            verifying_keys={"key-1": "secret-material"},
+        )
+
+
+@pytest.mark.parametrize("environment", ["local", "dev", "test"])
+def test_admin_token_is_optional_outside_trust_requiring_environments(environment: str) -> None:
+    settings = _settings(environment=environment, admin_token=None)
+    assert settings.admin_token is None
+
+
+def test_missing_boundary_is_reported_before_missing_admin_token() -> None:
+    """When both are absent the broader finding (no ingress boundary) is the one raised."""
+    with pytest.raises(ValidationError, match="no proven ingress trust boundary"):
+        _settings(admin_token=None, require_signature=False)

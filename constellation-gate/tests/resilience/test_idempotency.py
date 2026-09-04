@@ -84,3 +84,34 @@ def test_namespace_key_components_cannot_be_confused() -> None:
 
     store.set_for_packet(left, {"which": "left"})
     assert enforce_idempotency(right, store) is None
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 1_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_idempotency_entries_expire_after_ttl() -> None:
+    """The cache is a duplicate-delivery guard, not an archive for the life of the process."""
+    clock = _Clock()
+    store = IdempotencyStore(ttl_seconds=60.0, clock=clock)
+    store.set("k", {"answer": 1})
+
+    clock.now += 59.9
+    assert store.get("k") == {"answer": 1}
+    assert store.exists("k") is True
+
+    clock.now += 0.2
+    assert store.get("k") is None
+    assert store.exists("k") is False
+    assert len(store) == 0
+
+
+def test_idempotency_ttl_must_be_positive() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="ttl_seconds"):
+        IdempotencyStore(ttl_seconds=0)
