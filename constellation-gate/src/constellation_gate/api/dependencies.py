@@ -7,13 +7,16 @@ from typing import Any
 
 import httpx
 import yaml
+from constellation_node_sdk import sign_transport_packet
 from constellation_node_sdk.gate_authority import GateDispatchTransportConfig
+from constellation_node_sdk.transport.packet import TransportPacket
 
 from constellation_gate.boundary.ingress_validator import IngressValidator
 from constellation_gate.config.settings import GateSettings, get_settings
 from constellation_gate.orchestration.workflow_engine import WorkflowEngine
 from constellation_gate.orchestration.workflow_models import WorkflowDefinition
 from constellation_gate.routing.dispatch import Dispatcher
+from constellation_gate.routing.health_monitor import HealthMonitor
 from constellation_gate.routing.node_registry import NodeRegistry
 from constellation_gate.runtime.http_client import AsyncHttpClientManager
 from constellation_gate.runtime.node_limits import PerNodeLimiterManager
@@ -29,6 +32,45 @@ logger = logging.getLogger(__name__)
 @lru_cache
 def get_registry() -> NodeRegistry:
     return NodeRegistry()
+
+
+def load_static_registry() -> int:
+    """Populate the registry from GATE_NODE_REGISTRY_PATH, if set.
+
+    Called once from the ASGI lifespan. Without it the shipped
+    ``config/node_registry.yaml`` was never read by anything: Gate started with
+    an empty registry and the canonical ``converge`` route existed only after
+    the worker's own self-registration succeeded. Returns the number of nodes
+    loaded (0 when no path is configured).
+    """
+    settings = get_gate_settings()
+    path = settings.node_registry_path
+    if not path:
+        return 0
+    registry = get_registry()
+    registry.load_from_yaml(path)
+    loaded = len(registry.snapshot())
+    logger.info("node registry loaded %d node(s) from '%s'", loaded, path)
+    return loaded
+
+
+def build_health_monitor(*, client: httpx.AsyncClient | None) -> HealthMonitor | None:
+    """Build the worker health re-probe loop, or None when disabled.
+
+    A worker is marked unhealthy on the first connection failure and, before
+    this loop ran, nothing ever marked it healthy again: routing stayed dead
+    until the worker re-registered or Gate restarted. The monitor re-probes
+    every registered node's health endpoint at the configured cadence.
+    """
+    settings = get_gate_settings()
+    interval = settings.health_probe_interval_seconds
+    if interval <= 0:
+        logger.warning(
+            "GATE_HEALTH_PROBE_INTERVAL_SECONDS is 0; a worker marked unhealthy is "
+            "only restored by its own re-registration"
+        )
+        return None
+    return HealthMonitor(get_registry(), interval_seconds=interval, client=client)
 
 
 @lru_cache
@@ -109,6 +151,29 @@ def get_gate_dispatch_config() -> GateDispatchTransportConfig:
         verify_response_signatures=settings.require_signature,
         verifying_keys=settings.verifying_keys,
         verify_hop_signatures=settings.verify_hop_signatures,
+    )
+
+
+def sign_gate_response(packet: TransportPacket) -> TransportPacket:
+    """Sign the packet Gate hands back to its caller under Gate's own identity.
+
+    Gate returned the worker's response verbatim, still carrying the WORKER's
+    signature (``signing_key_id`` = the worker's key). The SDK verifies every
+    signature it receives, so a caller in a signed topology had to hold each
+    worker's verifying key -- peer-key awareness the Gate-only routing
+    contract exists to prevent. Gate is the caller's sole counterparty; the
+    response is therefore re-signed with Gate's key so callers need Gate's key
+    and nothing else. A Gate without a signing key returns the packet
+    unchanged (the worker signature, if any, stays as it was).
+    """
+    settings = get_gate_settings()
+    if not settings.signing_key or not settings.signing_key_id or not settings.signing_algorithm:
+        return packet
+    return sign_transport_packet(
+        packet,
+        key=settings.signing_key,
+        key_id=settings.signing_key_id,
+        algorithm=settings.signing_algorithm,
     )
 
 
@@ -238,6 +303,8 @@ def get_execute_service() -> ExecuteService:
         dispatcher=get_dispatcher(),
         workflow_engine=get_workflow_engine(),
         registry=get_registry(),
+        idempotency_ttl_seconds=settings.idempotency_ttl_seconds,
+        response_margin_ms=settings.response_margin_ms,
     )
 
 

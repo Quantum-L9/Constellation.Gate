@@ -25,17 +25,36 @@ from constellation_gate.boundary.ingress_validator import IngressValidator
 from constellation_gate.routing.dispatch import Dispatcher
 from constellation_gate.routing.node_registry import NodeRegistration, NodeRegistry
 
-# An Odoo-shaped enrichment payload. Gate has no vocabulary for any of it.
+# The exact payload the live Odoo builder emits
+# (IB-Odoo_19 plasticos_gate/services/gate_builders.py::build_converge_request).
+# Gate has no vocabulary for any of it.
 ODOO_PAYLOAD = {
-    "entity_snapshot": {"partner_id": 42, "vat": "BE0123456789"},
-    "status": "pending",
-    "final_fields": {"website": None},
-    "requested_providers": ["clearbit", "vies"],
+    "entity": {
+        "name": "Acme Recycling",
+        "city": "Charlotte",
+        "id": "res.partner:55",
+        "_odoo_entity_id": "res.partner:55",
+    },
+    "object_type": "plasticos",
+    "objective": "Full entity enrichment and inference",
+    "max_variations": 5,
+    "idempotency_key": "odoo:enrichment:plasticos:plasticos.enrichment.run:7",
+    "odoo": {
+        "model": "plasticos.enrichment.run",
+        "record_id": 7,
+        "company_id": 1,
+        "user_id": 2,
+        "db_name": "plasticos",
+        "correlation_id": "plasticos.enrichment.run:7",
+    },
 }
 
+# The exact answer shape EIE's converge handler returns (EnrichResponse).
 WORKER_RESULT = {
-    "status": "complete",
-    "final_fields": {"website": "https://example.test"},
+    "state": "completed",
+    "failure_reason": None,
+    "fields": {"website": "https://example.test"},
+    "confidence": 0.91,
     "provider_trace": [{"provider": "vies", "hit": True}],
 }
 
@@ -144,9 +163,11 @@ def test_worker_response_is_validated_and_returned_untranslated() -> None:
 
     assert isinstance(result, TransportPacket)
     assert result.payload == WORKER_RESULT
-    # Gate did not rewrite status -> state or final_fields -> fields.
-    assert result.payload["status"] == "complete"
-    assert "state" not in result.payload
+    # Gate did not translate the worker's dialect: state/fields ride as-is.
+    assert result.payload["state"] == "completed"
+    assert result.payload["fields"] == {"website": "https://example.test"}
+    assert "status" not in result.payload
+    assert "final_fields" not in result.payload
 
 
 def test_dispatch_hop_is_recorded_against_the_derived_packet() -> None:

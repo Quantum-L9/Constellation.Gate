@@ -57,9 +57,16 @@ variable "container_port" {
 }
 
 variable "allowed_cidrs" {
-  description = "CIDRs allowed to reach the public Gate port"
+  # No default on purpose. The previous default of ["0.0.0.0/0", "::/0"]
+  # exposed the Gate port to the whole internet unless an operator remembered
+  # to override it; the caller must now name the networks that may reach it.
+  description = "CIDRs allowed to reach the public Gate port (must be supplied; no world-open default)"
   type        = list(string)
-  default     = ["0.0.0.0/0", "::/0"]
+
+  validation {
+    condition     = length(var.allowed_cidrs) > 0 && !contains(var.allowed_cidrs, "0.0.0.0/0") && !contains(var.allowed_cidrs, "::/0")
+    error_message = "allowed_cidrs must list the specific networks that may reach the Gate port; 0.0.0.0/0 and ::/0 are refused."
+  }
 }
 
 variable "admin_cidrs" {

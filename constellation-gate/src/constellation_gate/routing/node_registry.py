@@ -80,6 +80,14 @@ class NodeRegistration(BaseModel):
         return normalized
 
 
+class NoHealthyNodeError(LookupError):
+    """An action Gate routes has an owner, but every owner is currently unhealthy.
+
+    Subclasses LookupError so existing callers that catch the generic case keep
+    working; the API maps it to 503 (retryable) instead of 404 (permanent).
+    """
+
+
 class NodeRegistry:
     """
     Thread-safe registry for Gate-managed worker nodes.
@@ -160,14 +168,25 @@ class NodeRegistry:
             raise ValueError("action must not be empty")
 
         with self._lock:
-            candidates = [
+            known = [
                 registration
                 for registration in self._nodes.values()
-                if normalized_action in registration.supported_actions and registration.healthy
+                if normalized_action in registration.supported_actions
             ]
+            candidates = [registration for registration in known if registration.healthy]
 
             if not candidates:
-                raise LookupError(f"no healthy node registered for action: {normalized_action}")
+                if known:
+                    # The action IS served here; its owner is merely out of
+                    # rotation. That is a transient condition (a health
+                    # re-probe or re-registration restores it), so it must
+                    # not wear the same "no such route" face as an unknown
+                    # action -- a caller classifies 404 as permanent.
+                    raise NoHealthyNodeError(
+                        f"no healthy node for action: {normalized_action} "
+                        f"({', '.join(sorted(r.node_name for r in known))} unhealthy)"
+                    )
+                raise LookupError(f"no node registered for action: {normalized_action}")
 
             ordered = sorted(
                 candidates,

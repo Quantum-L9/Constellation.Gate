@@ -1,13 +1,13 @@
 # Static seed topology for the EIE <-> CEG seam (seam audit 2026-09-02).
 #
-# Node names MUST equal each node's runtime identity (the SDK runtime rejects a
-# dispatch whose destination_node differs from its L9_NODE_NAME):
-#   - Enrichment.Inference.Engine registers as `enrichment-engine` (app/main.py NODE_NAME)
-#   - Cognitive.Engine.Graphs   registers as `graph`             (engine/spec.yaml node.id)
+# Loaded at startup when GATE_NODE_REGISTRY_PATH points here
+# (NodeRegistry.load_from_yaml). Runtime registration via POST /v1/admin/register
+# overwrites these entries. Every entry that claims a canonical action
+# (converge -> eie, match/sync/outcomes -> ceg) MUST carry metadata.owner.
 #
-# Runtime registration via POST /v1/admin/register (Gate_SDK register_node /
-# register_from_env) is authoritative and overwrites these entries. This file is
-# the documented shape for scripts/migrate_registry.py and pre-deploy checks.
+# Node names MUST equal each node's runtime identity:
+#   - Enrichment.Inference.Engine registers as `enrichment-engine`
+#   - Cognitive.Engine.Graphs   registers as `graph`
 enrichment-engine:
   internal_url: http://enrichment-engine:8000
   supported_actions:

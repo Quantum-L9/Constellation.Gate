@@ -20,6 +20,8 @@ authority (for canonical enrichment, the EIE persistence boundary).
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from typing import Any
 
 from constellation_node_sdk.transport.packet import TransportPacket
@@ -46,25 +48,51 @@ def idempotency_namespace_key(packet: TransportPacket) -> str | None:
 
 
 class IdempotencyStore:
-    """Process-local response cache keyed by namespaced routing identity."""
+    """Process-local response cache keyed by namespaced routing identity.
 
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
+    Entries expire after ``ttl_seconds`` (default: one day). The cache is a
+    duplicate-delivery guard, not an archive: a bounded lifetime means an
+    operation whose cached answer has aged out is executed afresh rather than
+    replayed for the life of the process. The clock is injectable so expiry is
+    testable without sleeping.
+    """
+
+    def __init__(
+        self,
+        *,
+        ttl_seconds: float = 86_400.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be > 0")
+        self._ttl = float(ttl_seconds)
+        self._clock = clock
+        self._store: dict[str, tuple[float, dict[str, Any]]] = {}
+
+    def _live(self, key: str) -> dict[str, Any] | None:
+        entry = self._store.get(key)
+        if entry is None:
+            return None
+        stored_at, value = entry
+        if self._clock() - stored_at >= self._ttl:
+            del self._store[key]
+            return None
+        return value
 
     def get(self, key: str) -> dict[str, Any] | None:
-        return self._store.get(key)
+        return self._live(key)
 
     def set(self, key: str, value: dict[str, Any]) -> None:
-        self._store[key] = value
+        self._store[key] = (self._clock(), value)
 
     def exists(self, key: str) -> bool:
-        return key in self._store
+        return self._live(key) is not None
 
     def get_for_packet(self, packet: TransportPacket) -> dict[str, Any] | None:
         key = idempotency_namespace_key(packet)
         if key is None:
             return None
-        return self._store.get(key)
+        return self._live(key)
 
     def set_for_packet(self, packet: TransportPacket, value: dict[str, Any]) -> bool:
         """Cache a result under the packet's namespaced key.
@@ -74,7 +102,7 @@ class IdempotencyStore:
         key = idempotency_namespace_key(packet)
         if key is None:
             return False
-        self._store[key] = value
+        self.set(key, value)
         return True
 
     def __len__(self) -> int:
