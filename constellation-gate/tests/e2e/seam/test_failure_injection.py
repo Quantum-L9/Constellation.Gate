@@ -188,10 +188,14 @@ def test_f4b_direct_ceg_to_eie_call_is_refused_by_eie_ingress(
         error_payload=payload,
         handler_executed=False,
         findings=[
-            "SEAM-INGRESS-01: CEG's gate-only middleware answers HTTP 403 while EIE's SDK runtime answers a "
-            "signed failure packet over HTTP 200; both refuse before any handler runs",
-            "SDK-OBS-01: the SDK runtime reports a gate-only ingress rejection as a redacted 'ValueError' failure "
-            "packet and writes no log line, so it is indistinguishable from a handler ValueError without a log",
+            (
+                "SEAM-INGRESS-01: CEG's gate-only middleware answers HTTP 403 while EIE's SDK runtime answers a "
+                + "signed failure packet over HTTP 200; both refuse before any handler runs"
+            ),
+            (
+                "SDK-OBS-01: the SDK runtime reports a gate-only ingress rejection as a redacted 'ValueError' failure "
+                + "packet and writes no log line, so it is indistinguishable from a handler ValueError without a log"
+            ),
         ],
     )
 
