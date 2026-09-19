@@ -28,8 +28,18 @@
 set -Eeuo pipefail
 
 SDK_REPO="${L9_E2E_SDK_REPO:-/home/user/quantum-l9/gate_sdk}"
-OUT="${1:?usage: vendor_gate_sdk.sh <output-dir> <sha>}"
-SHA="${2:?usage: vendor_gate_sdk.sh <output-dir> <sha>}"
+ROOT="${1:?usage: vendor_gate_sdk.sh <output-root> <sha>}"
+SHA="${2:?usage: vendor_gate_sdk.sh <output-root> <sha>}"
+
+# Vendor trees are keyed by commit and extraction is never done in place.
+# `git archive | tar -x` only ADDS files, so extracting over a tree left by a
+# different commit yields a mixed tree -- files deleted or renamed between the
+# two commits survive -- and the resulting image would not match the SHA this
+# script reports. Each extraction therefore lands in a fresh staging directory
+# that is promoted only once it is complete; a previous tree is displaced, not
+# deleted, so nothing is ever destroyed to make room.
+TARGET="${ROOT}/${SHA}"
+MARKER="${ROOT}/${SHA}.complete"
 
 if [[ ! -d "$SDK_REPO/.git" ]]; then
   echo "FATAL: SDK clone missing at $SDK_REPO" >&2
@@ -48,17 +58,29 @@ if [[ "$actual_type" != "commit" ]]; then
   exit 1
 fi
 
-mkdir -p "$OUT"
-# `git archive | tar -x` gives a clean export with no .git and no working-tree
-# contamination -- the tree exactly as recorded at that commit.
-git -C "$SDK_REPO" archive --format=tar "$SHA" | tar -x -C "$OUT"
+mkdir -p "$ROOT"
+
+if [[ -f "$MARKER" && -d "$TARGET" ]]; then
+  echo "reusing complete vendor tree for ${SHA}"
+else
+  staging="${ROOT}/.staging.${SHA}.$$"
+  mkdir -p "$staging"
+  # `git archive | tar -x` gives a clean export with no .git and no
+  # working-tree contamination -- the tree exactly as recorded at that commit.
+  git -C "$SDK_REPO" archive --format=tar "$SHA" | tar -x -C "$staging"
+  if [[ -e "$TARGET" ]]; then
+    mv "$TARGET" "${ROOT}/.superseded.${SHA}.$$"
+  fi
+  mv "$staging" "$TARGET"
+  echo "$SHA" > "$MARKER"
+fi
 
 tree_sha="$(git -C "$SDK_REPO" rev-parse "${SHA}^{tree}")"
 src_sha="$(git -C "$SDK_REPO" rev-parse "${SHA}:src")"
-version="$(grep -m1 -E '^version *=' "$OUT/pyproject.toml" | tr -d ' ')"
+version="$(grep -m1 -E '^version *=' "$TARGET/pyproject.toml" | tr -d ' ')"
 
 echo "vendored_sha=$SHA"
 echo "vendored_root_tree=$tree_sha"
 echo "vendored_src_tree=$src_sha"
 echo "vendored_${version}"
-echo "vendored_path=$OUT"
+echo "vendored_path=$TARGET"

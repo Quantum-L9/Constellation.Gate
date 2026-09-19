@@ -24,11 +24,13 @@ MANDATORY = [
 
 
 def load(p: Path):
-    """Parse the LAST JSON object in the file.
+    """Return the LAST top-level JSON object in the file.
 
-    Probes run inside application containers whose logging writes to stdout,
-    so a result file can carry log lines before the JSON. Treating that as
-    unparseable would report a scenario that actually ran as MISSING.
+    Probes run inside application containers whose logging writes to stdout, so
+    a result file can carry log lines -- themselves sometimes JSON -- before the
+    result. Treating that as unparseable would report a scenario that actually
+    ran as MISSING, and taking the FIRST object would report a log line as the
+    result. Scan every top-level object with raw_decode and keep the last.
     """
     try:
         raw = p.read_text()
@@ -38,13 +40,19 @@ def load(p: Path):
         return json.loads(raw)
     except Exception:
         pass
-    start = raw.find("{")
-    while start != -1:
+    decoder = json.JSONDecoder()
+    last = None
+    idx = raw.find("{")
+    while idx != -1:
         try:
-            return json.loads(raw[start:])
-        except Exception:
-            start = raw.find("{", start + 1)
-    return None
+            obj, end = decoder.raw_decode(raw, idx)
+        except ValueError:
+            idx = raw.find("{", idx + 1)
+            continue
+        if isinstance(obj, dict):
+            last = obj
+        idx = raw.find("{", max(end, idx + 1))
+    return last
 
 
 def main() -> int:

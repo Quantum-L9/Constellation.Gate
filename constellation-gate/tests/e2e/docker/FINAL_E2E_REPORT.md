@@ -10,7 +10,7 @@ correctly when attacked.* The one business path that requires a paid external
 provider was not exercised, and is named as out of scope below rather than
 simulated.
 
-Last run: `20260919T164952Z` — 17/17 checks PASS, reproduced across four
+Last run: `20260919T165801Z` — 17/17 checks PASS, reproduced across six
 consecutive clean-slate executions (the last with a Gate image rebuilt from
 `build_images.sh` alone and freshly generated credentials).
 

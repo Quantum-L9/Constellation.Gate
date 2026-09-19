@@ -46,11 +46,11 @@ done
 # ── 1. clean slate ───────────────────────────────────────────────────────────
 echo "== down -v =="
 $COMPOSE down -v --remove-orphans >/dev/null 2>&1 || true
-# `docker compose config` INTERPOLATES every variable, so the resolved file
-# carries the run's signing keys and admin token in plaintext. Redact before it
-# is ever written into the evidence bundle.
-$COMPOSE config > /root/l9e2e/compose_config.raw.yml
-python3 "${HERE}/redact.py" /root/l9e2e/compose_config.raw.yml "$EV/compose_config.yml" "${ENV_FILE}"
+# `docker compose config` INTERPOLATES every variable, so its output carries
+# the run's signing keys and admin token in plaintext. Stream it straight into
+# the redactor: writing it to a scratch file first would leave an unredacted
+# copy on disk, which redacting the bundle afterwards does not undo.
+$COMPOSE config | python3 "${HERE}/redact.py" - "$EV/compose_config.yml" "${ENV_FILE}"
 
 # ── 2. boot ──────────────────────────────────────────────────────────────────
 echo "== up =="

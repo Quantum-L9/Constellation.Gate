@@ -27,7 +27,7 @@ NOPROXY="${NO_PROXY:-localhost,127.0.0.1}"
 # the Gate build needs the commit exported over git first. EIE and CEG install
 # the SDK over git+https and need nothing extra.
 GATE_SDK_SHA="${L9_E2E_GATE_SDK_SHA:-2b2f53a28a59bbfb2fa45f5eac32b722d802209a}"
-SDK_VENDOR="${OUT}/gate_sdk_vendor"
+SDK_VENDOR_ROOT="${OUT}/gate_sdk_vendor"
 
 build_one() {
   local name="$1" context="$2" dockerfile="$3" tag="$4"
@@ -38,10 +38,13 @@ build_one() {
 
   local extra_ctx=()
   if [[ "$name" == "gate" ]]; then
-    bash "$HERE/vendor_gate_sdk.sh" "$SDK_VENDOR" "$GATE_SDK_SHA" \
+    bash "$HERE/vendor_gate_sdk.sh" "$SDK_VENDOR_ROOT" "$GATE_SDK_SHA" \
       | tee "${OUT}/gate.sdkvendor.txt"
+    local sdk_path
+    sdk_path="$(sed -n 's/^vendored_path=//p' "${OUT}/gate.sdkvendor.txt" | tail -1)"
+    [[ -d "$sdk_path" ]] || { echo "FATAL: vendor path not reported" >&2; return 1; }
     python3 "$HERE/patch_gate_sdk.py" "${OUT}/${name}.Dockerfile"
-    extra_ctx=(--build-context "l9sdk=${SDK_VENDOR}")
+    extra_ctx=(--build-context "l9sdk=${sdk_path}")
   fi
 
   docker buildx build \

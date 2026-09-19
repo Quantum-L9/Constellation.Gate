@@ -5,8 +5,10 @@ Two modes:
 
   redact.py <src> <dst> <env-file>
       Copy src to dst with every secret value from env-file replaced.
-      Used for `docker compose config`, which interpolates variables and so
-      emits the run's signing keys and admin token in plaintext.
+      `<src>` may be "-" to read stdin, which is how `docker compose config`
+      is consumed: it interpolates variables, so its output carries the run's
+      signing keys and admin token in plaintext. Streaming it means the
+      unredacted form is never written to disk at all.
 
   redact.py --scan <bundle-dir> <env-file>
       Walk a finished bundle and report any file still containing a secret.
@@ -65,9 +67,12 @@ def redact_text(body: str, secrets: set[str]) -> str:
 
 def mode_redact(src: Path, dst: Path, env_file: Path) -> int:
     secrets = secrets_from(env_file)
+    # "-" streams stdin so an unredacted copy never touches the filesystem.
+    body = sys.stdin.read() if str(src) == "-" else src.read_text(errors="replace")
     dst.parent.mkdir(parents=True, exist_ok=True)
-    dst.write_text(redact_text(src.read_text(errors="replace"), secrets))
-    print(f"redacted {src} -> {dst} ({len(secrets)} secret values)")
+    dst.write_text(redact_text(body, secrets))
+    print(f"redacted {'<stdin>' if str(src) == '-' else src} -> {dst} "
+          f"({len(secrets)} secret values)")
     return 0
 
 
