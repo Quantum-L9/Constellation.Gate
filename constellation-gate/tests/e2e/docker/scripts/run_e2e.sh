@@ -77,7 +77,7 @@ for i in $(seq 1 60); do
        | python3 -c 'import json,sys
 try: print(len(json.load(sys.stdin)))
 except Exception: print(0)')"
-  [ "$n" = "2" ] && { echo "both nodes registered after ~$((i*5))s"; break; }
+  [[ "$n" == "2" ]] && { echo "both nodes registered after ~$((i*5))s"; break; }
   sleep 5
 done
 curl -sS --noproxy '*' http://127.0.0.1:19000/v1/registry | jqp > "$EV/gate_registry.json"
@@ -129,12 +129,13 @@ for l in open('${ENV_FILE}'):
     if k=='L9E2E_GATE_KEY': print(v.strip(chr(39)))")"
 
 drive() {
+  local phase="$1"
   docker run --rm --network l9e2e_control \
     -v "${DOCKER_DIR}/scripts/driver.py:/driver.py:ro" \
     -e GATE_URL=http://gate:9000 -e L9_VERIFYING_KEYS_JSON="$VK" \
     -e L9E2E_DRIVER_KEY="$GK" -e L9E2E_DRIVER_KEY_ID=gate-e2e \
     -e HTTPS_PROXY= -e https_proxy= \
-    --entrypoint python l9e2e/gate:local /driver.py "$1" 2>/dev/null
+    --entrypoint python l9e2e/gate:local /driver.py "$phase" 2>/dev/null
 }
 
 echo "== main scenarios =="
@@ -198,7 +199,7 @@ for i in $(seq 1 40); do
 import json,sys
 try: print(json.load(sys.stdin).get('graph',{}).get('healthy'))
 except Exception: print('none')")"
-  [ "$h" = "True" ] && break
+  [[ "$h" == "True" ]] && break
   sleep 5
 done
 drive recovery > "$EV/flows/recovery.json"
