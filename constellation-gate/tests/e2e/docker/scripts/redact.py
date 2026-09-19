@@ -71,8 +71,9 @@ def mode_redact(src: Path, dst: Path, env_file: Path) -> int:
     body = sys.stdin.read() if str(src) == "-" else src.read_text(errors="replace")
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(redact_text(body, secrets))
-    print(f"redacted {'<stdin>' if str(src) == '-' else src} -> {dst} "
-          f"({len(secrets)} secret values)")
+    print(
+        f"redacted {'<stdin>' if str(src) == '-' else src} -> {dst} ({len(secrets)} secret values)"
+    )
     return 0
 
 
