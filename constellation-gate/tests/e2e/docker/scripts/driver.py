@@ -60,7 +60,15 @@ def client_config() -> GateClientConfig:
     )
 
 
-def signed_packet(action: str, payload: dict, *, destination: str = "gate") -> Any:
+def signed_packet(
+    action: str,
+    payload: dict,
+    *,
+    destination: str = "gate",
+    key: str | None = None,
+    key_id: str | None = None,
+) -> Any:
+    """Build a canonical packet signed as `key_id` (the driver's own by default)."""
     pkt = create_transport_packet(
         action=action,
         payload=payload,
@@ -69,7 +77,12 @@ def signed_packet(action: str, payload: dict, *, destination: str = "gate") -> A
         source_node="e2e-driver",
         reply_to="e2e-driver",
     )
-    return sign_transport_packet(pkt, key=DRIVER_KEY, key_id=DRIVER_KEY_ID, algorithm="hmac-sha256")
+    return sign_transport_packet(
+        pkt,
+        key=key or DRIVER_KEY,
+        key_id=key_id or DRIVER_KEY_ID,
+        algorithm="hmac-sha256",
+    )
 
 
 async def post_raw(body: dict) -> httpx.Response:
@@ -212,7 +225,14 @@ async def n_unsigned() -> None:
 
 
 async def n_bad_signature() -> None:
-    """Same packet, signature replaced with one produced by an unknown key."""
+    """Corrupt signature under a KNOWN key id.
+
+    This proves the signature itself is verified for a configured identity. It
+    deliberately does NOT cover an unknown signing identity -- the key id here
+    stays `gate-e2e`, which Gate can resolve -- so a regression that accepted
+    arbitrary key ids would still leave this green. `n_unknown_key_id` below
+    is the check for that.
+    """
     try:
         pkt = signed_packet(
             "sync", {"entity_type": "facilities", "batch": [{"facility_id": "E2E-BADSIG"}]}
@@ -228,6 +248,32 @@ async def n_bad_signature() -> None:
         )
     except Exception as exc:
         record("N2_bad_signature_rejected", status="ERROR", error=f"{type(exc).__name__}: {exc}")
+
+
+async def n_unknown_key_id() -> None:
+    """A validly-signed packet from an identity Gate has no key for.
+
+    Signed correctly, but as `rogue-e2e` with a secret that appears in no
+    verifying-key map. Gate must refuse it for want of a resolvable key rather
+    than fall back to any configured secret.
+    """
+    try:
+        rogue_secret = "00" * 32  # never placed in L9_VERIFYING_KEYS_JSON
+        pkt = signed_packet(
+            "sync",
+            {"entity_type": "facilities", "batch": [{"facility_id": "E2E-ROGUE"}]},
+            key=rogue_secret,
+            key_id="rogue-e2e",
+        )
+        r = await post_raw(json.loads(pkt.model_dump_json()))
+        record(
+            "N7_unknown_key_id_rejected",
+            status="PASS" if r.status_code in (400, 401, 403) else "FAIL",
+            http_status=r.status_code,
+            body=r.text[:400],
+        )
+    except Exception as exc:
+        record("N7_unknown_key_id_rejected", status="ERROR", error=f"{type(exc).__name__}: {exc}")
 
 
 async def n_unknown_action() -> None:
@@ -325,6 +371,7 @@ PHASES = {
         n_bad_signature,
         n_unknown_action,
         n_destination_override,
+        n_unknown_key_id,
     ],
     "outage": [n_worker_down],
     "recovery": [p_gate_to_ceg_sync],

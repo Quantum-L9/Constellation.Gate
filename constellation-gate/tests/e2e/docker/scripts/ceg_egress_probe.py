@@ -38,18 +38,32 @@ async def main() -> None:
             entity={"facility_id": "E2E-CEG-EGRESS-1"},
         )
         out["raw_result"] = result
-        # "failed" with a transport error means the hop did NOT happen.
-        # A non-transport failure still proves CEG -> Gate -> EIE routing.
-        transport_errors = {
-            "gate_not_configured",
-            "GateConnectionError",
-            "GateTimeoutError",
-            "GateProtocolError",
+        # Affirmative proof only. An earlier version inferred success from the
+        # ABSENCE of a few known transport errors, so a None return or any
+        # unlisted error read as PASS -- the probe could report the hop
+        # succeeded when CEG never reached Gate at all, and assert_evidence
+        # trusts this status directly. Require positive evidence instead:
+        # Gate returned a response packet AND EIE's handler actually ran.
+        payload = result.get("payload") if isinstance(result, dict) else None
+        payload = payload if isinstance(payload, dict) else {}
+        checks = {
+            "result_is_dict": isinstance(result, dict),
+            "status_ok": isinstance(result, dict) and result.get("status") == "ok",
+            "response_packet": isinstance(result, dict)
+            and result.get("packet_type") == "response",
+            "packet_id_present": bool(isinstance(result, dict) and result.get("packet_id")),
+            # Only EIE's enrichment handler produces these.
+            "eie_handler_ran": "inference_version" in payload
+            and "processing_time_ms" in payload,
         }
-        err = str(result.get("error", "")) if isinstance(result, dict) else ""
-        out["reached_eie"] = err not in transport_errors
+        out["checks"] = checks
+        out["reached_eie"] = all(checks.values())
         out["status"] = "PASS" if out["reached_eie"] else "FAIL"
-        out["transport_error"] = err if err in transport_errors else None
+        out["eie_inference_version"] = payload.get("inference_version")
+        # The business outcome needs a live provider; the transport hop does
+        # not. Report it rather than folding it into the verdict.
+        out["business_state"] = payload.get("state")
+        out["business_failure_reason"] = payload.get("failure_reason")
     except Exception as exc:  # noqa: BLE001 - probe must report, not raise
         out["status"] = "ERROR"
         out["error"] = f"{type(exc).__name__}: {exc}"

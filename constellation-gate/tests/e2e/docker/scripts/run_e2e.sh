@@ -108,7 +108,8 @@ for name, img in (("gate", "l9e2e/gate:local"), ("eie", "l9e2e/eie:local"), ("ce
 # GitHub archive endpoint is 403 here), so pip records file:// with no
 # vcs_info. Fold the exact SHA in from the vendoring receipt.
 import os, re
-receipt = "/root/l9e2e/build/gate.sdkvendor.txt"
+receipt = os.path.join(os.environ.get("L9_E2E_BUILD_DIR", "/root/l9e2e/build"),
+                       "gate.sdkvendor.txt")
 if os.path.exists(receipt) and not ((out.get("gate") or {}).get("direct_url") or {}).get("vcs_info"):
     m = re.search(r"vendored_sha=([0-9a-f]{40})", open(receipt).read())
     if m:

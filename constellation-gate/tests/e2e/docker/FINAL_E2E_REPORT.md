@@ -10,9 +10,9 @@ correctly when attacked.* The one business path that requires a paid external
 provider was not exercised, and is named as out of scope below rather than
 simulated.
 
-Last run: `20260919T165801Z` — 17/17 checks PASS, reproduced across six
-consecutive clean-slate executions (the last with a Gate image rebuilt from
-`build_images.sh` alone and freshly generated credentials).
+Last run: `20260919T170502Z` — 18/18 checks PASS, reproduced across nine
+consecutive clean-slate executions (one with a Gate image rebuilt from
+`build_images.sh` alone, and freshly generated credentials throughout).
 
 ---
 
@@ -119,7 +119,7 @@ static YAML seed):
 | P2 | signed client → Gate → **CEG** (`sync`) | `{"status":"success","synced_count":1}` + Neo4j row |
 | P3 | signed client → Gate → **CEG** (`match`) | real `candidates`/`scoring_meta` response |
 | P4 | replay of an identical signed packet | 1st `200` response, 2nd `400 replay detected`, **one** row written |
-| P5 | **CEG → Gate → EIE**, via CEG's own `engine.gate_egress` | `packet_type: response`; EIE handler genuinely ran (`inference_version v2.2.0`, 127 ms) |
+| P5 | **CEG → Gate → EIE**, via CEG's own `engine.gate_egress` | five affirmative checks: `status: ok`, `packet_type: response`, packet id present, and EIE's own `inference_version`/`processing_time_ms` in the payload |
 | P6 | **EIE → Gate → CEG**, via EIE's own `PacketRouter.notify_graph_sync` | `{"status":"success","synced_count":1}` + Neo4j row `enriched_by=enrichment-engine` |
 | P7 | recovery after worker restart | re-registered healthy in ~10 s, `sync` succeeds again |
 
@@ -128,7 +128,8 @@ static YAML seed):
 | ID | Attack | Actual behaviour |
 |---|---|---|
 | N1 | valid packet, signature removed | `400 invalid_transport_packet` — *"signature required but not present"* |
-| N2 | signature from an unknown key | `400 invalid_transport_packet` — *"invalid transport signature"* |
+| N2 | corrupt signature under a **known** key id | `400 invalid_transport_packet` — *"invalid transport signature"* |
+| N7 | valid signature from an **unknown** identity (`rogue-e2e`) | `400 invalid_transport_packet` — *"no verifying key available for transport signature verification"* — a distinct path from N2 |
 | N3 | action no node owns | `404 not_found` — *"no node registered for action: graph-query"* (permanent, not 503) |
 | N4 | client names a worker to bypass routing | `400` — *"packet destination does not match this node"* |
 | N5 | owning worker stopped | `502 worker_transport_failed`, `node: graph`, real `ConnectError`; **no direct-peer fallback**; registry flips `healthy=false` |

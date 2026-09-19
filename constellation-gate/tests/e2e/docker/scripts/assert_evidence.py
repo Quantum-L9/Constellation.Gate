@@ -20,6 +20,7 @@ MANDATORY = [
     ("N2_bad_signature_rejected", "wrong-key signature refused"),
     ("N3_unknown_action_404", "unowned action -> 404"),
     ("N4_destination_override_refused", "client cannot name a worker"),
+    ("N7_unknown_key_id_rejected", "signature from an unknown identity refused"),
 ]
 
 
