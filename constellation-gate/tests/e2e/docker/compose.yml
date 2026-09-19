@@ -1,0 +1,186 @@
+# Constellation release-set system E2E — Docker rail.
+#
+# This is NOT a merge of the three repositories' developer compose files. It is
+# a purpose-built topology whose networks make the routing invariant
+# structural rather than conventional:
+#
+#     enrichment-engine ── gate_eie_net ── gate ── gate_ceg_net ── graph
+#                    │                                       │
+#              eie_data_net                             ceg_data_net
+#
+# enrichment-engine and graph share NO network, so a direct peer call is not
+# merely forbidden by configuration -- Docker DNS cannot resolve the peer name
+# and no route exists. `getent hosts graph` from enrichment-engine must fail.
+#
+# Gate is the only service attached to both transport networks. The driver
+# reaches the system through Gate on control_net and never talks to a worker
+# directly during scenario execution.
+#
+# Images are built by scripts/build_images.sh from each repository's OWN
+# Dockerfile. Runtime commands are overridden only where determinism requires
+# it (see enrichment-engine), never to bypass real startup code.
+
+name: l9-constellation-e2e
+
+networks:
+  control_net:   { name: l9e2e_control }
+  gate_eie_net:  { name: l9e2e_gate_eie }
+  gate_ceg_net:  { name: l9e2e_gate_ceg }
+  eie_data_net:  { name: l9e2e_eie_data }
+  ceg_data_net:  { name: l9e2e_ceg_data }
+
+services:
+
+  # ─────────────────────────── routing authority ───────────────────────────
+  gate:
+    image: l9e2e/gate:local
+    container_name: l9e2e-gate
+    networks: [control_net, gate_eie_net, gate_ceg_net]
+    environment:
+      GATE_LOCAL_NODE: gate
+      HOST: "0.0.0.0"
+      PORT: "9000"
+      # staging (not local/dev/test) so the SDK/Gate production validators are
+      # live: dev_mode forbidden, admin token mandatory, signature+keys required.
+      L9_ENVIRONMENT: staging
+      L9_DEV_MODE: "false"
+      L9_REQUIRE_SIGNATURE: "true"
+      L9_SIGNING_ALGORITHM: hmac-sha256
+      L9_SIGNING_KEY: ${L9E2E_GATE_KEY:?ephemeral gate key required}
+      L9_SIGNING_KEY_ID: gate-e2e
+      L9_VERIFYING_KEYS_JSON: ${L9E2E_VERIFYING_KEYS_JSON:?verifying key map required}
+      GATE_ADMIN_TOKEN: ${L9E2E_ADMIN_TOKEN:?ephemeral admin token required}
+      L9_REPLAY_ENABLED: "true"
+      L9_TRUSTED_INGRESS_BOUNDARY: signature
+      # GATE_NODE_REGISTRY_PATH deliberately UNSET: the registry must start
+      # empty so that anything in it got there by a node's own live
+      # registration, not by a static YAML seed.
+      HTTPS_PROXY: ""
+      https_proxy: ""
+    ports: ["19000:9000"]          # operator diagnostics only
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:9000/v1/health',timeout=4).status==200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # ───────────────────────── enrichment node (EIE) ─────────────────────────
+  enrichment-engine:
+    image: l9e2e/eie:local
+    container_name: l9e2e-eie
+    networks: [gate_eie_net, eie_data_net]
+    # The repository Dockerfile runs `uvicorn --workers 4`. Registration and the
+    # GraphReturnChannel are per-process (in-memory), so 4 workers means 4
+    # independent registrations and a return channel invisible across workers.
+    # One worker gives the proof a single deterministic process lifecycle.
+    # This override lives here, in the E2E harness -- the production Dockerfile
+    # is not modified.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    environment:
+      GATE_URL: http://gate:9000
+      GATE_INTERNAL_URL: http://enrichment-engine:8000
+      GATE_REGISTRATION_ENABLED: "true"      # code default is False
+      GATE_REGISTER_OVERWRITE: "true"
+      GATE_ADMIN_TOKEN: ${L9E2E_ADMIN_TOKEN:?}
+      L9_NODE_NAME: enrichment-engine
+      L9_GATE_NODE_NAME: gate
+      L9_ENVIRONMENT: staging               # blocks EIE's dev_mode escape hatch
+      L9_DEV_MODE: "false"
+      L9_ENFORCE_GATE_ONLY_INGRESS: "true"
+      L9_REQUIRE_SIGNATURE: "true"
+      L9_SIGNING_ALGORITHM: hmac-sha256
+      L9_SIGNING_KEY: ${L9E2E_EIE_KEY:?}
+      L9_SIGNING_KEY_ID: eie-e2e
+      L9_VERIFYING_KEYS_JSON: ${L9E2E_VERIFYING_KEYS_JSON:?}
+      REDIS_URL: redis://eie-redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://enrich:enrich@eie-postgres:5432/enrich
+      HTTPS_PROXY: ""
+      https_proxy: ""
+    depends_on:
+      gate:         { condition: service_healthy }
+      eie-redis:    { condition: service_started }
+      eie-postgres: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/v1/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # ─────────────────────────── graph node (CEG) ────────────────────────────
+  graph:
+    image: l9e2e/ceg:local
+    container_name: l9e2e-ceg
+    networks: [gate_ceg_net, ceg_data_net]
+    environment:
+      GATE_URL: http://gate:9000
+      GATE_ADMIN_TOKEN: ${L9E2E_ADMIN_TOKEN:?}
+      GATE_REGISTRATION_ENABLED: "true"
+      GATE_REGISTER_OVERWRITE: "true"
+      # The SDK reads GATE_NODE_SPEC_PATH. Both CEG compose files set
+      # L9_NODE_SPEC_PATH, which nothing reads -- they work only because the
+      # SDK default happens to be engine/spec.yaml. Set the real name.
+      GATE_NODE_SPEC_PATH: engine/spec.yaml
+      L9_NODE_NAME: graph
+      L9_GATE_NODE_NAME: gate
+      L9_ENVIRONMENT: staging
+      L9_ENV: staging
+      L9_DEV_MODE: "false"
+      L9_ENFORCE_GATE_ONLY_INGRESS: "true"
+      L9_REQUIRE_SIGNATURE: "true"
+      L9_SIGNING_ALGORITHM: hmac-sha256
+      L9_SIGNING_KEY: ${L9E2E_CEG_KEY:?}
+      L9_SIGNING_KEY_ID: ceg-e2e
+      L9_VERIFYING_KEYS_JSON: ${L9E2E_VERIFYING_KEYS_JSON:?}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: ${L9E2E_NEO4J_PASSWORD:?}
+      HTTPS_PROXY: ""
+      https_proxy: ""
+    depends_on:
+      gate:  { condition: service_healthy }
+      neo4j: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/health',timeout=4).status==200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  # ───────────────────────── data plane: CEG side ──────────────────────────
+  # Enterprise edition: CEG routes queries with database=<domain_id>
+  # (multi-database), which Community Edition does not support.
+  neo4j:
+    image: neo4j:5-enterprise
+    container_name: l9e2e-neo4j
+    networks: [ceg_data_net]
+    environment:
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+      NEO4J_AUTH: neo4j/${L9E2E_NEO4J_PASSWORD:?}
+      # also exposed inside the container so the healthcheck can authenticate
+      L9E2E_NEO4J_PASSWORD: ${L9E2E_NEO4J_PASSWORD:?}
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p $${L9E2E_NEO4J_PASSWORD} 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+
+  # ───────────────────────── data plane: EIE side ──────────────────────────
+  eie-redis:
+    image: redis:7-alpine
+    container_name: l9e2e-eie-redis
+    networks: [eie_data_net]
+
+  eie-postgres:
+    image: postgres:16-alpine
+    container_name: l9e2e-eie-pg
+    networks: [eie_data_net]
+    environment:
+      POSTGRES_USER: enrich
+      POSTGRES_PASSWORD: enrich
+      POSTGRES_DB: enrich
