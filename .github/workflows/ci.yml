@@ -53,3 +53,9 @@ jobs:
       - name: Contract invariants
         run: |
           python scripts/validate_contracts.py
+      # scripts/validate_sdk_pin.py existed but no workflow ran it, so three
+      # files drifted onto three different Gate_SDK commits unnoticed. It lives
+      # at the repository root, above this job's working-directory.
+      - name: Gate SDK pin
+        run: |
+          python ../scripts/validate_sdk_pin.py
