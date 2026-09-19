@@ -16,11 +16,20 @@ dependencies = [
   # constellation-node-sdk is not published to PyPI; it lives in the sibling
   # Quantum-L9/Gate_SDK repository. Pin an exact commit so clean CI runners and
   # pre-commit hook environments resolve the same canonical transport contract.
-  # 69c6c67 = Gate_SDK main a0827f2 (src/ byte-identical to the previously
-  # pinned PR head bfe6642, verified 2026-09-02) plus the GateClientConfig fix
-  # that loads L9_VERIFYING_KEYS_JSON from the environment. EIE and CEG pin the
-  # same commit (VERSION_COMPATIBILITY_RECEIPT.yaml, seam audit 2026-09-02).
-  "constellation-node-sdk @ git+https://github.com/Quantum-L9/Gate_SDK.git@69c6c67060b08440734a61473c03663423709964",
+  # The pin must be reachable from a branch. pip/uv resolve a bare commit pin
+  # by cloning and running `rev-parse <sha>^0`, which only sees refs the remote
+  # advertises to a normal clone; GitHub does not advertise refs/pull/*. The
+  # previous pin 69c6c67 was the head of Gate_SDK PR #47 and never landed on a
+  # branch under that sha, so every clean install failed with "failed to find
+  # branch, tag, or commit". VERSION_COMPATIBILITY_RECEIPT.yaml and
+  # DEPLOYMENT_READINESS_RECEIPT.yaml (SDK-MERGE) both flagged this and named
+  # the repair: re-pin to the merge commit once #47 landed.
+  # e20f6c4 is that merge commit -- Gate_SDK 1.1.0 plus the GateClientConfig
+  # fix that loads L9_VERIFYING_KEYS_JSON from the environment. Its src/ tree
+  # is byte-identical to 69c6c67 (verified 2026-09-19), so the transport
+  # contract is unchanged; only reachability is repaired. EIE and CEG still
+  # carry the unreachable pin and need the same re-pin in their own repos.
+  "constellation-node-sdk @ git+https://github.com/Quantum-L9/Gate_SDK.git@e20f6c4ef71cd82f3a4cf6152b1090286e9970c4",
   "fastapi>=0.115.0",
   "httpx>=0.27.0",
   "pydantic>=2.8.0",
