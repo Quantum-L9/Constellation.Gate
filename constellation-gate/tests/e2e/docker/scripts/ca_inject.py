@@ -73,7 +73,9 @@ def render(source: Path) -> tuple[str, int]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--src", required=True, type=Path, help="repository Dockerfile (never modified)")
+    ap.add_argument(
+        "--src", required=True, type=Path, help="repository Dockerfile (never modified)"
+    )
     ap.add_argument("--out", required=True, type=Path, help="rendered Dockerfile to write")
     args = ap.parse_args()
 

@@ -41,7 +41,8 @@ async def main() -> None:
         )
         out["raw_result"] = result
         ok = isinstance(result, dict) and str(result.get("status", "")).lower() in {
-            "success", "ok",
+            "success",
+            "ok",
         }
         out["status"] = "PASS" if ok else "FAIL"
     except Exception as exc:  # noqa: BLE001 - probe must report, not raise

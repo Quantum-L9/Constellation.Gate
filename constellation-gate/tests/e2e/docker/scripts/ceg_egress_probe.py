@@ -41,8 +41,10 @@ async def main() -> None:
         # "failed" with a transport error means the hop did NOT happen.
         # A non-transport failure still proves CEG -> Gate -> EIE routing.
         transport_errors = {
-            "gate_not_configured", "GateConnectionError",
-            "GateTimeoutError", "GateProtocolError",
+            "gate_not_configured",
+            "GateConnectionError",
+            "GateTimeoutError",
+            "GateProtocolError",
         }
         err = str(result.get("error", "")) if isinstance(result, dict) else ""
         out["reached_eie"] = err not in transport_errors

@@ -23,11 +23,10 @@ import traceback
 from typing import Any
 
 import httpx
-
 from constellation_node_sdk.gate.client import GateClient
 from constellation_node_sdk.gate.config import GateClientConfig
-from constellation_node_sdk.transport.packet import create_transport_packet
 from constellation_node_sdk.security.signing import sign_transport_packet
+from constellation_node_sdk.transport.packet import create_transport_packet
 
 GATE_URL = os.environ["GATE_URL"].rstrip("/")
 VERIFYING = json.loads(os.environ["L9_VERIFYING_KEYS_JSON"])
@@ -70,9 +69,7 @@ def signed_packet(action: str, payload: dict, *, destination: str = "gate") -> A
         source_node="e2e-driver",
         reply_to="e2e-driver",
     )
-    return sign_transport_packet(
-        pkt, key=DRIVER_KEY, key_id=DRIVER_KEY_ID, algorithm="hmac-sha256"
-    )
+    return sign_transport_packet(pkt, key=DRIVER_KEY, key_id=DRIVER_KEY_ID, algorithm="hmac-sha256")
 
 
 async def post_raw(body: dict) -> httpx.Response:
@@ -81,6 +78,7 @@ async def post_raw(body: dict) -> httpx.Response:
 
 
 # ───────────────────────────── positive scenarios ─────────────────────────────
+
 
 async def p_gate_to_eie() -> None:
     """client -> Gate -> EIE, via an action EIE owns that needs no external API."""
@@ -91,25 +89,36 @@ async def p_gate_to_eie() -> None:
             tenant=TENANT,
             payload={
                 "inference_outputs": [
-                    {"entity_id": "E2E-1", "field": "grade",
-                     "value": "HDPE-A", "confidence": 0.93, "rule": "e2e"}
+                    {
+                        "entity_id": "E2E-1",
+                        "field": "grade",
+                        "value": "HDPE-A",
+                        "confidence": 0.93,
+                        "rule": "e2e",
+                    }
                 ]
             },
         )
-        ok = (resp.header.packet_type == "response"
-              and resp.payload.get("status") == "accepted")
-        record("P1_gate_to_eie", status="PASS" if ok else "FAIL",
-               packet_type=resp.header.packet_type,
-               action=resp.header.action,
-               source_node=resp.address.source_node,
-               reply_to=resp.address.reply_to,
-               signing_key_id=resp.security.signing_key_id,
-               signature_present=resp.security.signature is not None,
-               correlation_id=str(resp.header.correlation_id),
-               payload=resp.payload)
+        ok = resp.header.packet_type == "response" and resp.payload.get("status") == "accepted"
+        record(
+            "P1_gate_to_eie",
+            status="PASS" if ok else "FAIL",
+            packet_type=resp.header.packet_type,
+            action=resp.header.action,
+            source_node=resp.address.source_node,
+            reply_to=resp.address.reply_to,
+            signing_key_id=resp.security.signing_key_id,
+            signature_present=resp.security.signature is not None,
+            correlation_id=str(resp.header.correlation_id),
+            payload=resp.payload,
+        )
     except Exception as exc:
-        record("P1_gate_to_eie", status="FAIL", error=f"{type(exc).__name__}: {exc}",
-               trace=traceback.format_exc()[-1200:])
+        record(
+            "P1_gate_to_eie",
+            status="FAIL",
+            error=f"{type(exc).__name__}: {exc}",
+            trace=traceback.format_exc()[-1200:],
+        )
 
 
 async def p_gate_to_ceg_sync() -> None:
@@ -121,23 +130,35 @@ async def p_gate_to_ceg_sync() -> None:
             tenant=TENANT,
             payload={
                 "entity_type": "facilities",
-                "batch": [{"facility_id": "E2E-F-001",
-                           "name": "E2E Facility",
-                           "e2e_marker": "docker-rail"}],
+                "batch": [
+                    {
+                        "facility_id": "E2E-F-001",
+                        "name": "E2E Facility",
+                        "e2e_marker": "docker-rail",
+                    }
+                ],
             },
             idempotency_key="e2e:sync:facility:001",
-            )
-        ok = (resp.header.packet_type == "response"
-              and str(resp.payload.get("status", "")).lower() in {"success", "ok", "accepted"})
-        record("P2_gate_to_ceg_sync", status="PASS" if ok else "FAIL",
-               packet_type=resp.header.packet_type,
-               source_node=resp.address.source_node,
-               signing_key_id=resp.security.signing_key_id,
-               signature_present=resp.security.signature is not None,
-               payload=resp.payload)
+        )
+        ok = resp.header.packet_type == "response" and str(
+            resp.payload.get("status", "")
+        ).lower() in {"success", "ok", "accepted"}
+        record(
+            "P2_gate_to_ceg_sync",
+            status="PASS" if ok else "FAIL",
+            packet_type=resp.header.packet_type,
+            source_node=resp.address.source_node,
+            signing_key_id=resp.security.signing_key_id,
+            signature_present=resp.security.signature is not None,
+            payload=resp.payload,
+        )
     except Exception as exc:
-        record("P2_gate_to_ceg_sync", status="FAIL", error=f"{type(exc).__name__}: {exc}",
-               trace=traceback.format_exc()[-1200:])
+        record(
+            "P2_gate_to_ceg_sync",
+            status="FAIL",
+            error=f"{type(exc).__name__}: {exc}",
+            trace=traceback.format_exc()[-1200:],
+        )
 
 
 async def p_gate_to_ceg_match() -> None:
@@ -146,36 +167,46 @@ async def p_gate_to_ceg_match() -> None:
         resp = await gc.execute(
             action="match",
             tenant=TENANT,
-            payload={"match_direction": "supply_opportunity_to_buyer_facility",
-                         "query": {"polymer_type": "HDPE"}, "top_n": 5},
-            )
-        ok = (resp.header.packet_type == "response"
-              and "candidates" in resp.payload)
-        record("P3_gate_to_ceg_match", status="PASS" if ok else "FAIL",
-               packet_type=resp.header.packet_type,
-               source_node=resp.address.source_node,
-               payload_keys=sorted(resp.payload),
-               payload=resp.payload if not ok else None,
-               total_candidates=resp.payload.get("total_candidates"))
+            payload={
+                "match_direction": "supply_opportunity_to_buyer_facility",
+                "query": {"polymer_type": "HDPE"},
+                "top_n": 5,
+            },
+        )
+        ok = resp.header.packet_type == "response" and "candidates" in resp.payload
+        record(
+            "P3_gate_to_ceg_match",
+            status="PASS" if ok else "FAIL",
+            packet_type=resp.header.packet_type,
+            source_node=resp.address.source_node,
+            payload_keys=sorted(resp.payload),
+            payload=resp.payload if not ok else None,
+            total_candidates=resp.payload.get("total_candidates"),
+        )
     except Exception as exc:
         record("P3_gate_to_ceg_match", status="FAIL", error=f"{type(exc).__name__}: {exc}")
 
 
 # ──────────────────────────── adversarial scenarios ───────────────────────────
 
+
 async def n_unsigned() -> None:
     """A structurally valid packet with the signature removed must be refused."""
     try:
-        pkt = signed_packet("sync", {"entity_type": "facilities",
-                                     "batch": [{"facility_id": "E2E-UNSIGNED"}]})
+        pkt = signed_packet(
+            "sync", {"entity_type": "facilities", "batch": [{"facility_id": "E2E-UNSIGNED"}]}
+        )
         body = json.loads(pkt.model_dump_json())
         body["security"]["signature"] = None
         body["security"]["signing_key_id"] = None
         body["security"]["signature_algorithm"] = None
         r = await post_raw(body)
-        record("N1_unsigned_rejected",
-               status="PASS" if r.status_code in (400, 401, 403) else "FAIL",
-               http_status=r.status_code, body=r.text[:400])
+        record(
+            "N1_unsigned_rejected",
+            status="PASS" if r.status_code in (400, 401, 403) else "FAIL",
+            http_status=r.status_code,
+            body=r.text[:400],
+        )
     except Exception as exc:
         record("N1_unsigned_rejected", status="ERROR", error=f"{type(exc).__name__}: {exc}")
 
@@ -183,14 +214,18 @@ async def n_unsigned() -> None:
 async def n_bad_signature() -> None:
     """Same packet, signature replaced with one produced by an unknown key."""
     try:
-        pkt = signed_packet("sync", {"entity_type": "facilities",
-                                     "batch": [{"facility_id": "E2E-BADSIG"}]})
+        pkt = signed_packet(
+            "sync", {"entity_type": "facilities", "batch": [{"facility_id": "E2E-BADSIG"}]}
+        )
         body = json.loads(pkt.model_dump_json())
         body["security"]["signature"] = "de" * 32  # well-formed hex, wrong key
         r = await post_raw(body)
-        record("N2_bad_signature_rejected",
-               status="PASS" if r.status_code in (400, 401, 403) else "FAIL",
-               http_status=r.status_code, body=r.text[:400])
+        record(
+            "N2_bad_signature_rejected",
+            status="PASS" if r.status_code in (400, 401, 403) else "FAIL",
+            http_status=r.status_code,
+            body=r.text[:400],
+        )
     except Exception as exc:
         record("N2_bad_signature_rejected", status="ERROR", error=f"{type(exc).__name__}: {exc}")
 
@@ -200,9 +235,12 @@ async def n_unknown_action() -> None:
     try:
         pkt = signed_packet("graph-query", {"q": 1})
         r = await post_raw(json.loads(pkt.model_dump_json()))
-        record("N3_unknown_action_404",
-               status="PASS" if r.status_code == 404 else "FAIL",
-               http_status=r.status_code, body=r.text[:300])
+        record(
+            "N3_unknown_action_404",
+            status="PASS" if r.status_code == 404 else "FAIL",
+            http_status=r.status_code,
+            body=r.text[:300],
+        )
     except Exception as exc:
         record("N3_unknown_action_404", status="ERROR", error=f"{type(exc).__name__}: {exc}")
 
@@ -211,59 +249,83 @@ async def n_destination_override() -> None:
     """A client must not be able to name a worker and bypass Gate's ownership
     decision. `sync` is CEG-owned; address it explicitly at enrichment-engine."""
     try:
-        pkt = signed_packet("sync",
-                            {"entity_type": "facilities",
-                             "batch": [{"facility_id": "E2E-HIJACK"}]},
-                            destination="enrichment-engine")
+        pkt = signed_packet(
+            "sync",
+            {"entity_type": "facilities", "batch": [{"facility_id": "E2E-HIJACK"}]},
+            destination="enrichment-engine",
+        )
         r = await post_raw(json.loads(pkt.model_dump_json()))
         ok = r.status_code >= 400
-        record("N4_destination_override_refused",
-               status="PASS" if ok else "FAIL",
-               http_status=r.status_code, body=r.text[:400])
+        record(
+            "N4_destination_override_refused",
+            status="PASS" if ok else "FAIL",
+            http_status=r.status_code,
+            body=r.text[:400],
+        )
     except Exception as exc:
-        record("N4_destination_override_refused", status="ERROR",
-               error=f"{type(exc).__name__}: {exc}")
+        record(
+            "N4_destination_override_refused", status="ERROR", error=f"{type(exc).__name__}: {exc}"
+        )
 
 
 async def n_worker_down() -> None:
     """Run only in the outage phase: CEG is stopped, so a CEG-owned action must
     fail closed at Gate (503/502/504) with no direct-peer fallback."""
     try:
-        pkt = signed_packet("sync", {"entity_type": "facilities",
-                                     "batch": [{"facility_id": "E2E-OUTAGE"}]})
+        pkt = signed_packet(
+            "sync", {"entity_type": "facilities", "batch": [{"facility_id": "E2E-OUTAGE"}]}
+        )
         r = await post_raw(json.loads(pkt.model_dump_json()))
-        record("N5_worker_down_fails_closed",
-               status="PASS" if r.status_code in (502, 503, 504) else "FAIL",
-               http_status=r.status_code, body=r.text[:400])
+        record(
+            "N5_worker_down_fails_closed",
+            status="PASS" if r.status_code in (502, 503, 504) else "FAIL",
+            http_status=r.status_code,
+            body=r.text[:400],
+        )
     except Exception as exc:
-        record("N5_worker_down_fails_closed", status="ERROR",
-               error=f"{type(exc).__name__}: {exc}")
+        record("N5_worker_down_fails_closed", status="ERROR", error=f"{type(exc).__name__}: {exc}")
 
 
 async def p_replay_idempotency() -> None:
     """The identical signed packet delivered twice must not double-apply."""
     try:
-        pkt = signed_packet("sync", {"entity_type": "facilities",
-                                     "batch": [{"facility_id": "E2E-REPLAY",
-                                                "name": "Replay Target"}]})
+        pkt = signed_packet(
+            "sync",
+            {
+                "entity_type": "facilities",
+                "batch": [{"facility_id": "E2E-REPLAY", "name": "Replay Target"}],
+            },
+        )
         body = json.loads(pkt.model_dump_json())
         r1 = await post_raw(body)
         r2 = await post_raw(body)
-        first_type = (r1.json().get("header", {}).get("packet_type")
-                      if r1.status_code == 200 else None)
-        ok = (r1.status_code == 200 and first_type == "response"
-              and r2.status_code in (400, 409))
-        record("P4_replay_same_packet", status="PASS" if ok else "FAIL",
-               first=r1.status_code, first_packet_type=first_type,
-               second=r2.status_code, second_body=r2.text[:300])
+        first_type = (
+            r1.json().get("header", {}).get("packet_type") if r1.status_code == 200 else None
+        )
+        ok = r1.status_code == 200 and first_type == "response" and r2.status_code in (400, 409)
+        record(
+            "P4_replay_same_packet",
+            status="PASS" if ok else "FAIL",
+            first=r1.status_code,
+            first_packet_type=first_type,
+            second=r2.status_code,
+            second_body=r2.text[:300],
+        )
     except Exception as exc:
         record("P4_replay_same_packet", status="ERROR", error=f"{type(exc).__name__}: {exc}")
 
 
 PHASES = {
-    "main": [p_gate_to_eie, p_gate_to_ceg_sync, p_gate_to_ceg_match,
-             p_replay_idempotency, n_unsigned, n_bad_signature,
-             n_unknown_action, n_destination_override],
+    "main": [
+        p_gate_to_eie,
+        p_gate_to_ceg_sync,
+        p_gate_to_ceg_match,
+        p_replay_idempotency,
+        n_unsigned,
+        n_bad_signature,
+        n_unknown_action,
+        n_destination_override,
+    ],
     "outage": [n_worker_down],
     "recovery": [p_gate_to_ceg_sync],
 }

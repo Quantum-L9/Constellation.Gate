@@ -56,15 +56,19 @@ def main() -> int:
         got = main_flows.get(key)
         results[key] = got.get("status") if isinstance(got, dict) else "MISSING"
 
-    for fname, key in (("outage.json", "N5_worker_down_fails_closed"),
-                       ("recovery.json", "P2_gate_to_ceg_sync")):
+    for fname, key in (
+        ("outage.json", "N5_worker_down_fails_closed"),
+        ("recovery.json", "P2_gate_to_ceg_sync"),
+    ):
         d = load(ev / "flows" / fname) or {}
         rk = key if fname == "outage.json" else "P7_recovery_after_restart"
         got = d.get(key)
         results[rk] = got.get("status") if isinstance(got, dict) else "MISSING"
 
-    for fname, key in (("eie_to_ceg.json", "P6_eie_to_gate_to_ceg"),
-                       ("ceg_to_eie.json", "P5_ceg_to_gate_to_eie")):
+    for fname, key in (
+        ("eie_to_ceg.json", "P6_eie_to_gate_to_ceg"),
+        ("ceg_to_eie.json", "P5_ceg_to_gate_to_eie"),
+    ):
         d = load(ev / "flows" / fname) or {}
         results[key] = d.get("status", "MISSING") if isinstance(d, dict) else "MISSING"
 
@@ -73,7 +77,8 @@ def main() -> int:
 
     reg = load(ev / "gate_registry.json") or {}
     results["REG_live_registration"] = (
-        "PASS" if {"enrichment-engine", "graph"} <= set(reg) else "FAIL")
+        "PASS" if {"enrichment-engine", "graph"} <= set(reg) else "FAIL"
+    )
 
     sdk = load(ev / "sdk_provenance.json") or {}
     commits, sources = {}, {}
@@ -88,14 +93,16 @@ def main() -> int:
         else:
             commits[node], sources[node] = None, "unresolved"
     results["SDK_provenance_captured"] = (
-        "PASS" if all(commits.get(n) for n in ("gate", "eie", "ceg")) else "FAIL")
+        "PASS" if all(commits.get(n) for n in ("gate", "eie", "ceg")) else "FAIL"
+    )
 
-    persisted = (ev / "flows" / "neo4j_state.txt")
+    persisted = ev / "flows" / "neo4j_state.txt"
     body = persisted.read_text() if persisted.exists() else ""
     results["PERSIST_neo4j_effect"] = (
-        "PASS" if "E2E-EIE-EGRESS-1" in body and "E2E-F-001" in body else "FAIL")
+        "PASS" if "E2E-EIE-EGRESS-1" in body and "E2E-F-001" in body else "FAIL"
+    )
 
-    scan = (ev / "secret_scan.txt")
+    scan = ev / "secret_scan.txt"
     scan_body = scan.read_text() if scan.exists() else "MISSING"
     results["EVIDENCE_no_secrets"] = "PASS" if "LEAKS: none" in scan_body else "FAIL"
 
