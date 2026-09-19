@@ -46,7 +46,9 @@ for relative in PIN_SITES:
     for sha in sorted(found - {PIN}):
         errors.append(f"{relative}: pins {sha}, expected {PIN}")
     for match in FLOATING.finditer(text):
-        errors.append(f"{relative}: floating ref {match.group(0)!r} (pin a 40-hex commit)")
+        errors.append(
+            f"{relative}: floating ref {match.group(0)!r} (pin a 40-hex commit)"
+        )
 
 if errors:
     print("FAIL")
