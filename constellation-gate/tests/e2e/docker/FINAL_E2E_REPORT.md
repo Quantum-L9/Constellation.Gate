@@ -10,9 +10,9 @@ correctly when attacked.* The one business path that requires a paid external
 provider was not exercised, and is named as out of scope below rather than
 simulated.
 
-Last run: `20260919T170502Z` — 18/18 checks PASS, reproduced across nine
-consecutive clean-slate executions (one with a Gate image rebuilt from
-`build_images.sh` alone, and freshly generated credentials throughout).
+Last run: `20260919T172948Z` — 18/18 checks PASS, reproduced across twelve
+consecutive clean-slate executions, the last three after the SDK pins were
+converged (see §3) and with Gate built from its pristine lock path.
 
 ---
 
@@ -45,20 +45,23 @@ Read from each image's installed `dist-info/direct_url.json`, not from lockfiles
 
 | Node | SDK version | Installed commit | Declared as | Source of truth |
 |---|---|---|---|---|
-| gate | 1.1.0 | `2b2f53a28a59bbfb2fa45f5eac32b722d802209a` | `requirements.lock` archive URL | vendoring receipt |
-| eie | 1.0.1 | `69c6c67060b08440734a61473c03663423709964` | pinned SHA | container dist-info |
-| ceg | 1.1.0 | `e9f829f982110be13752da8f18c7a9692e8ed908` | **`@v1` — a mutable tag** | container dist-info |
+| gate | 1.1.0 | `e9f829f982110be13752da8f18c7a9692e8ed908` | `requirements.lock` archive URL | container dist-info (archive url) |
+| eie | 1.0.1 | `69c6c67060b08440734a61473c03663423709964` | pinned SHA | container dist-info (vcs) |
+| ceg | 1.1.0 | `e9f829f982110be13752da8f18c7a9692e8ed908` | `@v1` → resolved by uv | container dist-info (vcs) |
 
-**Three different commits across three images.** Resolved at source level:
+**Converged during this campaign.** Gate previously installed `2b2f53a2`; `requirements.lock` now pins `e9f829f`, so Gate and CEG run the same commit and EIE runs a commit whose `src/` tree is byte-identical to it. Resolved at source level:
 
 - EIE (`69c6c67`) and CEG (`e9f829f`) have **byte-identical `src/` trees**
   (`src_tree=4785dc8d…`) despite different version strings. They are
   interchangeable in code; only the metadata differs.
-- Gate's image (`2b2f53a2`, `src_tree=cfe9eb0c…`) **differs by 31 lines in
-  `src/constellation_node_sdk/gate/config.py`**. That commit hardcodes
-  `verifying_keys={}` in `get_gate_client_config_from_env()`; the fix that
-  loads `L9_VERIFYING_KEYS_JSON` from the environment lands in `69c6c67`
-  and `e9f829f`.
+- The commit Gate's image **used to** install (`2b2f53a2`,
+  `src_tree=cfe9eb0c…`) differed by 31 lines in
+  `src/constellation_node_sdk/gate/config.py`: it hardcoded
+  `verifying_keys={}` in `get_gate_client_config_from_env()`, so an
+  env-configured client could not resolve Gate's response-signing key. The fix
+  is present in `69c6c67` and `e9f829f`. `2b2f53a2` and `69c6c67` are both
+  **dangling PR heads**, reachable on no branch of Gate_SDK; `e9f829f` is on
+  `main` and carries tags `v1` and `v1.1.0`.
 
 ### Findings
 
@@ -205,10 +208,14 @@ Both are transport-level only and are recorded in the bundle:
    by `scripts/ca_inject.py`. Every dependency-resolution and install
    instruction is preserved byte-identically. Images differ from production by
    exactly one added CA certificate per stage.
-2. **Gate SDK vendoring** — Gate's lock installs the SDK from a GitHub archive
-   URL this session's proxy refuses. The SDK is installed from a `git archive`
-   export of **that same commit**, verified by object SHA; pip's tarball hash
-   check is replaced by git object verification for that one requirement only.
+2. **Gate SDK vendoring — no longer in force.** Gate's lock installs the SDK
+   from a GitHub archive URL that this session's egress policy originally
+   refused (HTTP 403). Once `Quantum-L9/Gate_SDK` was attached to the session
+   the endpoint returned 200, and `build_images.sh` now probes it and takes the
+   **pristine lock path**, so pip hash-verifies the SDK exactly as in
+   production. Vendoring remains only as a fallback for an environment where
+   the archive endpoint is blocked; when it fires it trades pip's tarball hash
+   for git object verification of the same commit.
 
 Neither changes which SDK revision runs, and neither touches product code.
 

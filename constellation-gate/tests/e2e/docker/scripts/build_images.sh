@@ -38,13 +38,31 @@ build_one() {
 
   local extra_ctx=()
   if [[ "$name" == "gate" ]]; then
-    bash "$HERE/vendor_gate_sdk.sh" "$SDK_VENDOR_ROOT" "$GATE_SDK_SHA" \
-      | tee "${OUT}/gate.sdkvendor.txt"
-    local sdk_path
-    sdk_path="$(sed -n 's/^vendored_path=//p' "${OUT}/gate.sdkvendor.txt" | tail -1)"
-    [[ -d "$sdk_path" ]] || { echo "FATAL: vendor path not reported" >&2; return 1; }
-    python3 "$HERE/patch_gate_sdk.py" "${OUT}/${name}.Dockerfile"
-    extra_ctx=(--build-context "l9sdk=${sdk_path}")
+    # Gate's lock installs the SDK from a GitHub archive URL. Prefer that
+    # pristine path: it is what production does, and pip then hash-verifies the
+    # SDK like every other requirement. Vendoring is a FALLBACK for an
+    # environment whose egress policy refuses the archive endpoint -- it trades
+    # pip's hash check for git object verification, so it is a deviation worth
+    # avoiding whenever the real path works.
+    local lock_sha archive_url archive_code
+    lock_sha="$(sed -n 's#.*/Gate_SDK/archive/\([0-9a-f]\{40\}\)\.tar\.gz.*#\1#p' \
+                "${context}/requirements.lock" | head -1)"
+    archive_url="https://github.com/Quantum-L9/Gate_SDK/archive/${lock_sha}.tar.gz"
+    archive_code="$(curl -sS -o /dev/null -w '%{http_code}' -L --max-time 60 "$archive_url" 2>/dev/null || echo 000)"
+    if [[ "$archive_code" == "200" ]]; then
+      echo "gate: SDK archive reachable (HTTP 200) — building the pristine lock path, no vendoring"
+      printf 'mode=pristine\narchive_http=%s\nlock_sha=%s\n' "$archive_code" "$lock_sha" \
+        > "${OUT}/gate.sdkvendor.txt"
+    else
+      echo "gate: SDK archive unreachable (HTTP ${archive_code}) — falling back to git vendoring"
+      bash "$HERE/vendor_gate_sdk.sh" "$SDK_VENDOR_ROOT" "${lock_sha:-$GATE_SDK_SHA}" \
+        | tee "${OUT}/gate.sdkvendor.txt"
+      local sdk_path
+      sdk_path="$(sed -n 's/^vendored_path=//p' "${OUT}/gate.sdkvendor.txt" | tail -1)"
+      [[ -d "$sdk_path" ]] || { echo "FATAL: vendor path not reported" >&2; return 1; }
+      python3 "$HERE/patch_gate_sdk.py" "${OUT}/${name}.Dockerfile"
+      extra_ctx=(--build-context "l9sdk=${sdk_path}")
+    fi
   fi
 
   docker buildx build \

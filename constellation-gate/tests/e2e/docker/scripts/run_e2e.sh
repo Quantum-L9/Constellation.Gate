@@ -104,17 +104,42 @@ for name, img in (("gate", "l9e2e/gate:local"), ("eie", "l9e2e/eie:local"), ("ce
         out[name] = json.loads(r.stdout.strip() or "{}")
     except Exception:
         out[name] = {"error": (r.stderr or r.stdout)[:300]}
-# Gate installs the SDK from a vendored export of its locked commit (the
-# GitHub archive endpoint is 403 here), so pip records file:// with no
-# vcs_info. Fold the exact SHA in from the vendoring receipt.
+# Resolve each node's SDK commit from CONTAINER metadata first; the vendoring
+# receipt is a last resort and only valid for a local-path install.
+#
+# pip records a different shape per install method:
+#   git+https://...@<sha>      -> direct_url.vcs_info.commit_id
+#   https://.../<sha>.tar.gz   -> direct_url.archive_info  (NO vcs_info; the
+#                                 commit is in the url)
+#   /local/path                -> direct_url.dir_info      (no commit at all)
+#
+# An earlier version only understood vcs_info, so an archive install fell
+# through to the vendoring receipt and reported whatever SHA the last vendoring
+# run wrote -- a commit the image did not contain. A provenance gate that is
+# confidently wrong is worse than one that reports nothing, so the receipt is
+# now consulted ONLY for a dir_info install.
 import os, re
-receipt = os.path.join(os.environ.get("L9_E2E_BUILD_DIR", "/root/l9e2e/build"),
-                       "gate.sdkvendor.txt")
-if os.path.exists(receipt) and not ((out.get("gate") or {}).get("direct_url") or {}).get("vcs_info"):
-    m = re.search(r"vendored_sha=([0-9a-f]{40})", open(receipt).read())
-    if m:
-        out.setdefault("gate", {})["vendored_commit_id"] = m.group(1)
-        out["gate"]["vendored_source"] = "git export of requirements.lock pin"
+
+SHA_IN_URL = re.compile(r"/([0-9a-f]{40})\.tar\.gz$")
+
+for node, info in out.items():
+    du = (info or {}).get("direct_url") or {}
+    if (du.get("vcs_info") or {}).get("commit_id"):
+        continue  # git install: already authoritative
+    if du.get("archive_info"):
+        m = SHA_IN_URL.search(du.get("url", ""))
+        if m:
+            info["archive_commit_id"] = m.group(1)
+            info["commit_source"] = "container archive url"
+        continue
+    if du.get("dir_info") is not None:
+        receipt = os.path.join(os.environ.get("L9_E2E_BUILD_DIR", "/root/l9e2e/build"),
+                               f"{node}.sdkvendor.txt")
+        if os.path.exists(receipt):
+            m = re.search(r"vendored_sha=([0-9a-f]{40})", open(receipt).read())
+            if m:
+                info["vendored_commit_id"] = m.group(1)
+                info["commit_source"] = "vendoring receipt (local path install)"
 json.dump(out, open(sys.argv[1], "w"), indent=1)
 print(json.dumps(out, indent=1))
 PY

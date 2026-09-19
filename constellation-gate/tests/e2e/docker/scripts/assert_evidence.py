@@ -95,10 +95,15 @@ def main() -> int:
         du = (info or {}).get("direct_url") or {}
         cid = (du.get("vcs_info") or {}).get("commit_id")
         if cid:
-            commits[node], sources[node] = cid, "container_dist_info"
+            commits[node], sources[node] = cid, "container_dist_info (vcs)"
+        elif (info or {}).get("archive_commit_id"):
+            # Archive install: the commit is in the URL pip recorded, which is
+            # container metadata and therefore authoritative.
+            commits[node] = info["archive_commit_id"]
+            sources[node] = "container_dist_info (archive url)"
         elif (info or {}).get("vendored_commit_id"):
             commits[node] = info["vendored_commit_id"]
-            sources[node] = "vendoring_receipt (pip records file:// for a path install)"
+            sources[node] = "vendoring_receipt (local path install only)"
         else:
             commits[node], sources[node] = None, "unresolved"
     results["SDK_provenance_captured"] = (
