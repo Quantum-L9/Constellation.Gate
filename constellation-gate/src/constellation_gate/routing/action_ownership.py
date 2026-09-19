@@ -15,6 +15,12 @@ CANONICAL_ACTION_OWNERS: Final[dict[str, str]] = {
     "match": "ceg",
     "sync": "ceg",
     "outcomes": "ceg",
+    # CEG-004: CEG advertises `resolve` (engine/spec.yaml) and Gate accepted the
+    # registration, but the action appeared in no ownership entry — so it had no
+    # collision protection. A second node advertising `resolve` would have been
+    # load-balanced against CEG for a name with no agreed contract, which is the
+    # precise failure this lock exists to prevent. Entity resolution is CEG's.
+    "resolve": "ceg",
     # Enrichment.Inference.Engine (enrichment domain node)
     "converge": "eie",
     "graph-inference-result": "eie",
