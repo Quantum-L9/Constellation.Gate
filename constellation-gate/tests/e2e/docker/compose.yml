@@ -94,7 +94,7 @@ services:
       L9_SIGNING_KEY_ID: eie-e2e
       L9_VERIFYING_KEYS_JSON: ${L9E2E_VERIFYING_KEYS_JSON:?}
       REDIS_URL: redis://eie-redis:6379/0
-      DATABASE_URL: postgresql+asyncpg://enrich:enrich@eie-postgres:5432/enrich
+      DATABASE_URL: postgresql+asyncpg://enrich:${L9E2E_PG_PASSWORD:?}@eie-postgres:5432/enrich
       HTTPS_PROXY: ""
       https_proxy: ""
     depends_on:
@@ -182,5 +182,5 @@ services:
     networks: [eie_data_net]
     environment:
       POSTGRES_USER: enrich
-      POSTGRES_PASSWORD: enrich
+      POSTGRES_PASSWORD: ${L9E2E_PG_PASSWORD:?ephemeral postgres password required}
       POSTGRES_DB: enrich

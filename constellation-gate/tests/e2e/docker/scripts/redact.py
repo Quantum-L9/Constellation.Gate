@@ -28,7 +28,7 @@ PLACEHOLDER = "***REDACTED-BY-L9-E2E***"
 # *values* are the same secrets, so it is expanded rather than matched whole.
 SECRET_VARS = {
     "L9E2E_GATE_KEY", "L9E2E_EIE_KEY", "L9E2E_CEG_KEY",
-    "L9E2E_ADMIN_TOKEN", "L9E2E_NEO4J_PASSWORD",
+    "L9E2E_ADMIN_TOKEN", "L9E2E_NEO4J_PASSWORD", "L9E2E_PG_PASSWORD",
 }
 JSON_MAP_VARS = {"L9E2E_VERIFYING_KEYS_JSON"}
 

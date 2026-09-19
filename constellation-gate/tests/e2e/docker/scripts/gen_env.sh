@@ -18,6 +18,10 @@ eie_key="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 ceg_key="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 admin="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
 neo4j_pw="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18).replace("-","x").replace("_","y"))')"
+# EIE's Postgres is an ephemeral, network-isolated fixture with no published
+# port, but a literal credential in a tracked file is still a literal
+# credential -- generate it like every other secret.
+pg_pw="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18).replace("-","x").replace("_","y"))')"
 
 verifying="$(python3 -c '
 import json, sys
@@ -31,6 +35,7 @@ L9E2E_EIE_KEY=${eie_key}
 L9E2E_CEG_KEY=${ceg_key}
 L9E2E_ADMIN_TOKEN=${admin}
 L9E2E_NEO4J_PASSWORD=${neo4j_pw}
+L9E2E_PG_PASSWORD=${pg_pw}
 L9E2E_VERIFYING_KEYS_JSON=${verifying}
 EOF
 

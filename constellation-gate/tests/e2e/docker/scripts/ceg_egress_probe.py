@@ -38,7 +38,6 @@ async def main() -> None:
             entity={"facility_id": "E2E-CEG-EGRESS-1"},
         )
         out["raw_result"] = result
-        status = str(result.get("status", "")).lower() if isinstance(result, dict) else ""
         # "failed" with a transport error means the hop did NOT happen.
         # A non-transport failure still proves CEG -> Gate -> EIE routing.
         transport_errors = {

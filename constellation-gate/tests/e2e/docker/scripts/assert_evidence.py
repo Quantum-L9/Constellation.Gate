@@ -50,13 +50,11 @@ def load(p: Path):
 def main() -> int:
     ev = Path(sys.argv[1])
     results: dict[str, str] = {}
-    detail: dict[str, object] = {}
 
     main_flows = load(ev / "flows" / "main.json") or {}
-    for key, label in MANDATORY:
+    for key, _label in MANDATORY:
         got = main_flows.get(key)
         results[key] = got.get("status") if isinstance(got, dict) else "MISSING"
-        detail[key] = label
 
     for fname, key in (("outage.json", "N5_worker_down_fails_closed"),
                        ("recovery.json", "P2_gate_to_ceg_sync")):

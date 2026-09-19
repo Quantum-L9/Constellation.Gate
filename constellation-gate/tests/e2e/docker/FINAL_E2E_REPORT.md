@@ -10,8 +10,9 @@ correctly when attacked.* The one business path that requires a paid external
 provider was not exercised, and is named as out of scope below rather than
 simulated.
 
-Last run: `20260919T164450Z` — 17/17 checks PASS, reproduced across three
-consecutive clean-slate executions.
+Last run: `20260919T164952Z` — 17/17 checks PASS, reproduced across four
+consecutive clean-slate executions (the last with a Gate image rebuilt from
+`build_images.sh` alone and freshly generated credentials).
 
 ---
 
@@ -222,6 +223,7 @@ tests/e2e/docker/ca/ca-bundle.crt             build-time CA (session-local)
 tests/e2e/docker/scripts/build_images.sh      builds from each repo's Dockerfile
 tests/e2e/docker/scripts/ca_inject.py         renders the CA-trust layer
 tests/e2e/docker/scripts/vendor_gate_sdk.sh   exports Gate's locked SDK commit
+tests/e2e/docker/scripts/patch_gate_sdk.py    points Gate's build at that export
 tests/e2e/docker/scripts/gen_env.sh           ephemeral per-identity secrets
 tests/e2e/docker/scripts/driver.py            signed-packet scenarios
 tests/e2e/docker/scripts/eie_egress_probe.py  EIE -> Gate -> CEG
