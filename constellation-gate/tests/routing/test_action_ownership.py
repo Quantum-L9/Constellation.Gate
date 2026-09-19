@@ -110,6 +110,81 @@ def test_ceg_runtime_node_name_resolves_to_ceg_owner_without_metadata() -> None:
     assert registry.resolve_action("match").node_name == "graph"
 
 
+# ---------------------------------------------------------------------------
+# CEG-004 — `resolve`
+#
+# CEG advertises `resolve` in engine/spec.yaml and Gate accepted the
+# registration, but the action was in no ownership entry. An action absent from
+# CANONICAL_ACTION_OWNERS is not merely undocumented: `required` is None, which
+# puts it on the multi-replica path that `score` relies on, so an untagged
+# second claimant registers cleanly and entity resolution gets load-balanced
+# across two nodes with no agreed contract. Same shape as the `enrich` seam
+# lock above, because it is the same defect.
+#
+# Two of the four below fail if `"resolve": "ceg"` is removed. The other two
+# pin behaviour the entry must not break: the owner it accepts, and the
+# untagged `graph` registration production actually sends.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_accepts_its_canonical_owner() -> None:
+    registry = NodeRegistry()
+    registry.register_node("ceg-a", _node("ceg-a", ("match", "resolve"), owner="ceg"))
+    assert registry.resolve_action("resolve").node_name == "ceg-a"
+
+
+def test_resolve_rejects_a_non_ceg_owner() -> None:
+    registry = NodeRegistry()
+    with pytest.raises(ActionOwnershipError, match="owned by 'ceg'"):
+        registry.register_node(
+            "enrichment-engine", _node("enrichment-engine", ("resolve",), owner="eie")
+        )
+
+
+def test_resolve_cross_owner_collision_blocked() -> None:
+    registry = NodeRegistry()
+    registry.register_node("graph", _node("graph", ("resolve",), owner="ceg"))
+    with pytest.raises(ActionOwnershipError, match="owned by 'ceg'|collision"):
+        registry.register_node("rogue", _node("rogue", ("resolve",), owner="eie"))
+    assert registry.resolve_action("resolve").node_name == "graph"
+
+
+def test_resolve_blocks_an_untagged_second_claimant() -> None:
+    """This is the case the missing ownership entry actually left open.
+
+    Two tagged owners in conflict were already blocked without any entry, by the
+    generic `claimant != other_owner` branch. The hole was an *untagged* node:
+    with `resolve` absent from CANONICAL_ACTION_OWNERS, `required` is None, and
+    the collision loop's first branch short-circuits whenever either side's
+    owner is None — the multi-replica allowance that makes `score` work. A node
+    whose name matches no alias registers cleanly alongside CEG and
+    `resolve_action` then load-balances entity resolution across both.
+
+    Removing `"resolve": "ceg"` from the registry makes this test fail; that is
+    the whole point of the entry.
+    """
+    registry = NodeRegistry()
+    registry.register_node("graph", _node("graph", ("match", "resolve")))
+    with pytest.raises(
+        ActionOwnershipError, match="requires metadata.owner|owned by 'ceg'|collision"
+    ):
+        registry.register_node("worker-7", _node("worker-7", ("resolve",)))
+    assert registry.resolve_action("resolve").node_name == "graph"
+
+
+def test_resolve_registers_under_cegs_real_runtime_identity() -> None:
+    """The registration Gate actually receives: node name `graph`, no owner tag.
+
+    engine/spec.yaml declares `resolve` among CEG's actions and registers under
+    node id `graph`. If the alias table did not map `graph` -> `ceg`, adding the
+    ownership entry would have broken the live registration rather than guarded
+    it — so this asserts the path production takes, not a synthetic one.
+    """
+    registry = NodeRegistry()
+    registry.register_node("graph", _node("graph", ("match", "sync", "outcomes", "resolve")))
+    assert registry.resolve_action("resolve").node_name == "graph"
+
+
 def test_admin_registration_surfaces_ownership_error() -> None:
     import asyncio
 
@@ -159,7 +234,10 @@ def test_workflow_rejects_unknown_step_action_when_registry_populated() -> None:
     definitions = {
         "full_pipeline": WorkflowDefinition(
             name="full_pipeline",
-            steps=[WorkflowStep(name="bad-1", action="not-a-registered-action")],
+            # Tuple, not list: WorkflowDefinition.steps is tuple[WorkflowStep, ...].
+            # Pydantic coerces the list at runtime, so the test passed either way
+            # and only mypy saw it — and CI runs `mypy src`, not tests.
+            steps=(WorkflowStep(name="bad-1", action="not-a-registered-action"),),
         )
     }
     with pytest.raises(ValueError, match="shared NodeRegistry"):
