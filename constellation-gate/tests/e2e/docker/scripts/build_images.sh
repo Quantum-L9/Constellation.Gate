@@ -48,7 +48,13 @@ build_one() {
     lock_sha="$(sed -n 's#.*/Gate_SDK/archive/\([0-9a-f]\{40\}\)\.tar\.gz.*#\1#p' \
                 "${context}/requirements.lock" | head -1)"
     archive_url="https://github.com/Quantum-L9/Gate_SDK/archive/${lock_sha}.tar.gz"
-    archive_code="$(curl -sS -o /dev/null -w '%{http_code}' -L --max-time 60 "$archive_url" 2>/dev/null || echo 000)"
+    # --proto/--proto-redir pin both the initial request and every redirect to
+    # https. The probe deliberately follows redirects (github.com hands off to
+    # codeload.github.com), and without these an attacker-influenced redirect
+    # could downgrade the hop to plaintext http.
+    archive_code="$(curl -sS -o /dev/null -w '%{http_code}' \
+                      --proto '=https' --proto-redir '=https' \
+                      -L --max-time 60 "$archive_url" 2>/dev/null || echo 000)"
     if [[ "$archive_code" == "200" ]]; then
       echo "gate: SDK archive reachable (HTTP 200) — building the pristine lock path, no vendoring"
       printf 'mode=pristine\narchive_http=%s\nlock_sha=%s\n' "$archive_code" "$lock_sha" \
