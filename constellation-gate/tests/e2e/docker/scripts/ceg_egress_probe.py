@@ -49,12 +49,10 @@ async def main() -> None:
         checks = {
             "result_is_dict": isinstance(result, dict),
             "status_ok": isinstance(result, dict) and result.get("status") == "ok",
-            "response_packet": isinstance(result, dict)
-            and result.get("packet_type") == "response",
+            "response_packet": isinstance(result, dict) and result.get("packet_type") == "response",
             "packet_id_present": bool(isinstance(result, dict) and result.get("packet_id")),
             # Only EIE's enrichment handler produces these.
-            "eie_handler_ran": "inference_version" in payload
-            and "processing_time_ms" in payload,
+            "eie_handler_ran": "inference_version" in payload and "processing_time_ms" in payload,
         }
         out["checks"] = checks
         out["reached_eie"] = all(checks.values())
