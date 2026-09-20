@@ -53,3 +53,20 @@ jobs:
       - name: Contract invariants
         run: |
           python scripts/validate_contracts.py
+
+      # Gate_SDK release identity. The validator lives at the repository root,
+      # not in the constellation-gate package, so these two steps opt out of
+      # the workflow-level working-directory.
+      - name: SDK release identity — active declarations (offline)
+        working-directory: .
+        run: |
+          python scripts/validate_sdk_pin.py
+
+      - name: SDK release identity — lock agrees with the v1 channel (networked)
+        working-directory: .
+        # Fails closed. This is the only check that catches a requirements.lock
+        # left behind after Gate_SDK advances the v1 channel; an unresolvable
+        # remote is a failure, not a warning, because an unverifiable lock has
+        # not been verified.
+        run: |
+          python scripts/validate_sdk_pin.py --verify-tag
