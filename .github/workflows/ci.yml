@@ -54,9 +54,10 @@ jobs:
         run: |
           python scripts/validate_contracts.py
 
-      # Gate_SDK release identity. The validator lives at the repository root,
-      # not in the constellation-gate package, so these two steps opt out of
-      # the workflow-level working-directory.
+      # scripts/validate_sdk_pin.py existed but no workflow ran it, so three
+      # files drifted onto three different Gate_SDK commits unnoticed. It lives
+      # at the repository root, so both steps opt out of the workflow-level
+      # working-directory rather than reaching up with `../`.
       - name: SDK release identity — active declarations (offline)
         working-directory: .
         run: |

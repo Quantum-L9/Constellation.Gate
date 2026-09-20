@@ -18,6 +18,18 @@ dependencies = [
   # major channel `v1`, owned by Gate_SDK's RELEASE_IDENTITY_LEDGER — not a
   # commit sha. Gate, CEG and EIE all declare this same channel, so "which SDK
   # is the rail on" has one answer instead of one per manifest.
+  #
+  # A sha pin also has to be *reachable*, which is how this dependency broke
+  # before: pip/uv resolve a bare commit by cloning and running
+  # `rev-parse <sha>^0`, which only sees refs the remote advertises, and GitHub
+  # does not advertise refs/pull/*. The previous pin 69c6c67 was the head of
+  # Gate_SDK PR #47 and never landed on a branch under that sha, so every clean
+  # install failed with "failed to find branch, tag, or commit"
+  # (VERSION_COMPATIBILITY_RECEIPT.yaml and DEPLOYMENT_READINESS_RECEIPT.yaml
+  # SDK-MERGE both flagged it). A tag is always advertised, so `@v1` closes that
+  # failure mode by construction rather than by re-pinning to a newer sha that
+  # can go stale the same way.
+  #
   # Reproducibility comes from the generated requirements.lock, which records
   # the concrete object `v1` resolved to plus its archive sha256. That object
   # is execution evidence; it is never the declared dependency.
