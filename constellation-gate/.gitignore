@@ -48,6 +48,12 @@ data/
 state/
 registry_export.json
 
+# Seam e2e evidence (tests/e2e/seam writes node logs, registry snapshots and
+# seam_evidence.json per run). The root .gitignore's `/.l9/runtime/` is anchored
+# to the repo root, so it does not match this path — and ci.yml runs pytest with
+# `working-directory: constellation-gate`, which is exactly where these land.
+.l9/runtime/
+
 # Terraform
 .terraform/
 .terraform.lock.hcl
