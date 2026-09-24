@@ -22,26 +22,20 @@ echo "evidence: $EV"
 
 jqp() { python3 -m json.tool 2>/dev/null || cat; }
 
-# ── 0. provenance of the inputs ──────────────────────────────────────────────
-python3 - "$WORKSPACE" "$EV/git_heads.json" <<'PY'
-import json, subprocess, sys
-ws, out = sys.argv[1], sys.argv[2]
-repos = ["Constellation.Gate", "Enrichment.Inference.Engine", "Cognitive.Engine.Graphs"]
-def g(d, *a):
-    return subprocess.run(["git", "-C", d, *a], capture_output=True, text=True).stdout.strip()
-data = {}
-for r in repos:
-    d = f"{ws}/{r}"
-    data[r] = {"head": g(d, "rev-parse", "HEAD"),
-               "branch": g(d, "rev-parse", "--abbrev-ref", "HEAD"),
-               "dirty": g(d, "status", "--short")}
-json.dump(data, open(out, "w"), indent=1)
-print(json.dumps({k: {"head": v["head"], "dirty_files": len(v["dirty"].splitlines())}
-                  for k, v in data.items()}, indent=1))
-PY
+# ── 0. provenance of the inputs (fail-closed) ────────────────────────────────
+# Every release-set checkout must be clean and, when L9_E2E_EXPECT_<NODE>_SHA
+# is set, at exactly that commit. A dirty or unexpected source stops the run
+# here: a PASS over bytes that differ from the recorded commits is not proof.
+python3 "${HERE}/provenance.py" sources --workspace "$WORKSPACE" \
+  --out "$EV/source_revisions.json"
 for r in Constellation.Gate Enrichment.Inference.Engine Cognitive.Engine.Graphs; do
   { echo "### $r"; git -C "$WORKSPACE/$r" status --short; } >> "$EV/workspace_status.txt"
 done
+# The one SDK commit Gate's lock resolves to; the verdict requires the Gate
+# image to contain exactly this commit.
+LOCK_SHA="$(python3 "${HERE}/provenance.py" sdk-lock \
+  "$WORKSPACE/Constellation.Gate/constellation-gate/requirements.lock")"
+printf '{"lock_sha": "%s"}\n' "$LOCK_SHA" > "$EV/sdk_lock.json"
 
 # ── 1. clean slate ───────────────────────────────────────────────────────────
 echo "== down -v =="
@@ -85,6 +79,21 @@ curl -sS --noproxy '*' http://127.0.0.1:19000/v1/health   | jqp > "$EV/health_sn
 
 # ── 4. image + SDK provenance (read from the containers, not from lockfiles) ─
 docker images --format '{{json .}}' | grep l9e2e > "$EV/image_provenance.json" || true
+# The commit each image was built from (build_images.sh labels). assert_evidence
+# requires these to equal the source revisions this run was bound to.
+python3 - "$EV/image_revisions.json" <<'PY'
+import json, subprocess, sys
+out = {}
+for node in ("gate", "eie", "ceg"):
+    r = subprocess.run(
+        ["docker", "image", "inspect", f"l9e2e/{node}:local", "--format",
+         '{{index .Config.Labels "org.opencontainers.image.revision"}}'],
+        capture_output=True, text=True)
+    rev = r.stdout.strip()
+    out[node] = rev if r.returncode == 0 and rev and rev != "<no value>" else None
+json.dump(out, open(sys.argv[1], "w"), indent=1)
+print(json.dumps(out, indent=1))
+PY
 python3 - "$EV/sdk_provenance.json" <<'PY'
 import json, subprocess, sys
 probe = (

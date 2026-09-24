@@ -56,6 +56,47 @@ def load(p: Path):
     return last
 
 
+NODES = ("gate", "eie", "ceg")
+
+
+def provenance_results(ev: Path, sdk_commits: dict[str, str | None]) -> dict[str, str]:
+    """Bind the verdict to exact, clean sources and the lock-resolved SDK.
+
+    - PROVENANCE_sources_clean: every release-set checkout was clean (and at
+      its expected commit when one was supplied) when the run started.
+    - PROVENANCE_images_bound: each image's org.opencontainers.image.revision
+      label is the source commit the run was bound to. An image left over from
+      another checkout, or built before a new commit, fails here.
+    - SDK_gate_matches_lock: the SDK commit found in the Gate image is the one
+      requirements.lock resolves to; no alternate SDK can masquerade as it.
+    """
+    out: dict[str, str] = {}
+    sources = load(ev / "source_revisions.json") or {}
+    nodes = sources.get("nodes") if isinstance(sources.get("nodes"), dict) else {}
+    out["PROVENANCE_sources_clean"] = (
+        "PASS"
+        if sources.get("verdict") == "PASS"
+        and all(isinstance(nodes.get(n), dict) and not nodes[n].get("violations") for n in NODES)
+        else "FAIL"
+    )
+
+    images = load(ev / "image_revisions.json") or {}
+    bound = all(
+        isinstance(nodes.get(n), dict)
+        and nodes[n].get("head")
+        and images.get(n) == nodes[n].get("head")
+        for n in NODES
+    )
+    out["PROVENANCE_images_bound"] = "PASS" if bound else "FAIL"
+
+    lock = load(ev / "sdk_lock.json") or {}
+    lock_sha = lock.get("lock_sha")
+    out["SDK_gate_matches_lock"] = (
+        "PASS" if lock_sha and sdk_commits.get("gate") == lock_sha else "FAIL"
+    )
+    return out
+
+
 def main() -> int:
     ev = Path(sys.argv[1])
     results: dict[str, str] = {}
@@ -109,6 +150,7 @@ def main() -> int:
     results["SDK_provenance_captured"] = (
         "PASS" if all(commits.get(n) for n in ("gate", "eie", "ceg")) else "FAIL"
     )
+    results.update(provenance_results(ev, commits))
 
     persisted = ev / "flows" / "neo4j_state.txt"
     body = persisted.read_text() if persisted.exists() else ""

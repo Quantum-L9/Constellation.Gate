@@ -31,15 +31,18 @@ SDK_REPO="${L9_E2E_SDK_REPO:-/home/user/quantum-l9/gate_sdk}"
 ROOT="${1:?usage: vendor_gate_sdk.sh <output-root> <sha>}"
 SHA="${2:?usage: vendor_gate_sdk.sh <output-root> <sha>}"
 
-# Vendor trees are keyed by commit and extraction is never done in place.
-# `git archive | tar -x` only ADDS files, so extracting over a tree left by a
-# different commit yields a mixed tree -- files deleted or renamed between the
-# two commits survive -- and the resulting image would not match the SHA this
-# script reports. Each extraction therefore lands in a fresh staging directory
-# that is promoted only once it is complete; a previous tree is displaced, not
-# deleted, so nothing is ever destroyed to make room.
+# Every run materialises a FRESH tree; nothing on disk is ever reused.
+# A cached tree plus a completion marker proves only that an extraction once
+# finished -- not that the bytes still match the commit -- so a modified cache
+# would have been installed while this script reported the requested SHA.
+# `git archive` reads from the object store, where every object is verified by
+# its hash, so a fresh extraction of a verified commit IS that commit.
+#
+# Extraction is never done in place either: `git archive | tar -x` only ADDS
+# files, so extracting over an older tree would leave a mixed tree. Each run
+# lands in its own staging directory that is promoted only once complete; a
+# previous tree is displaced, not deleted.
 TARGET="${ROOT}/${SHA}"
-MARKER="${ROOT}/${SHA}.complete"
 
 if [[ ! -d "$SDK_REPO/.git" ]]; then
   echo "FATAL: SDK clone missing at $SDK_REPO" >&2
@@ -60,20 +63,15 @@ fi
 
 mkdir -p "$ROOT"
 
-if [[ -f "$MARKER" && -d "$TARGET" ]]; then
-  echo "reusing complete vendor tree for ${SHA}"
-else
-  staging="${ROOT}/.staging.${SHA}.$$"
-  mkdir -p "$staging"
-  # `git archive | tar -x` gives a clean export with no .git and no
-  # working-tree contamination -- the tree exactly as recorded at that commit.
-  git -C "$SDK_REPO" archive --format=tar "$SHA" | tar -x -C "$staging"
-  if [[ -e "$TARGET" ]]; then
-    mv "$TARGET" "${ROOT}/.superseded.${SHA}.$$"
-  fi
-  mv "$staging" "$TARGET"
-  echo "$SHA" > "$MARKER"
+staging="${ROOT}/.staging.${SHA}.$$"
+mkdir -p "$staging"
+# `git archive | tar -x` gives a clean export with no .git and no working-tree
+# contamination -- the tree exactly as recorded at that commit.
+git -C "$SDK_REPO" archive --format=tar "$SHA" | tar -x -C "$staging"
+if [[ -e "$TARGET" ]]; then
+  mv "$TARGET" "${ROOT}/.superseded.${SHA}.$$"
 fi
+mv "$staging" "$TARGET"
 
 tree_sha="$(git -C "$SDK_REPO" rev-parse "${SHA}^{tree}")"
 src_sha="$(git -C "$SDK_REPO" rev-parse "${SHA}:src")"

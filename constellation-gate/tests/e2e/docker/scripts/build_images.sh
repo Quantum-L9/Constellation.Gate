@@ -7,6 +7,12 @@
 #
 # --network host is required because the session's egress proxy listens on
 # 127.0.0.1 and the default bridge cannot reach it.
+#
+# Provenance is an input contract, not a record: before anything is built every
+# release-set checkout must be clean and, when L9_E2E_EXPECT_<NODE>_SHA is set,
+# at exactly that commit (provenance.py sources). Each image carries the commit
+# it was built from as org.opencontainers.image.revision, and run_e2e.sh fails
+# the verdict unless those labels equal the sources it ran against.
 set -Eeuo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,11 +29,12 @@ mkdir -p "$OUT"
 PROXY="${HTTPS_PROXY:-http://127.0.0.1:37691}"
 NOPROXY="${NO_PROXY:-localhost,127.0.0.1}"
 
-# Gate's lock pins the SDK by an archive URL this session's proxy refuses, so
-# the Gate build needs the commit exported over git first. EIE and CEG install
-# the SDK over git+https and need nothing extra.
-GATE_SDK_SHA="${L9_E2E_GATE_SDK_SHA:-2b2f53a28a59bbfb2fa45f5eac32b722d802209a}"
+# Gate's lock is the only source of the Gate SDK commit. There is no fallback
+# SHA: a lock that cannot be resolved to exactly one commit stops the build.
 SDK_VENDOR_ROOT="${OUT}/gate_sdk_vendor"
+
+python3 "$HERE/provenance.py" sources --workspace "$WORKSPACE" \
+  --out "${OUT}/source_revisions.json"
 
 build_one() {
   local name="$1" context="$2" dockerfile="$3" tag="$4"
@@ -45,8 +52,8 @@ build_one() {
     # pip's hash check for git object verification, so it is a deviation worth
     # avoiding whenever the real path works.
     local lock_sha archive_url archive_code
-    lock_sha="$(sed -n 's#.*/Gate_SDK/archive/\([0-9a-f]\{40\}\)\.tar\.gz.*#\1#p' \
-                "${context}/requirements.lock" | head -1)"
+    # Exactly one SDK requirement with a 40-hex archive commit, or FATAL.
+    lock_sha="$(python3 "$HERE/provenance.py" sdk-lock "${context}/requirements.lock")"
     archive_url="https://github.com/Quantum-L9/Gate_SDK/archive/${lock_sha}.tar.gz"
     # --proto/--proto-redir pin both the initial request and every redirect to
     # https. The probe deliberately follows redirects (github.com hands off to
@@ -61,7 +68,7 @@ build_one() {
         > "${OUT}/gate.sdkvendor.txt"
     else
       echo "gate: SDK archive unreachable (HTTP ${archive_code}) — falling back to git vendoring"
-      bash "$HERE/vendor_gate_sdk.sh" "$SDK_VENDOR_ROOT" "${lock_sha:-$GATE_SDK_SHA}" \
+      bash "$HERE/vendor_gate_sdk.sh" "$SDK_VENDOR_ROOT" "${lock_sha}" \
         | tee "${OUT}/gate.sdkvendor.txt"
       local sdk_path
       sdk_path="$(sed -n 's/^vendored_path=//p' "${OUT}/gate.sdkvendor.txt" | tail -1)"
@@ -71,9 +78,14 @@ build_one() {
     fi
   fi
 
+  local revision
+  revision="$(git -C "${context}" rev-parse --verify HEAD)"
+
   docker buildx build \
     --network host \
     --progress plain \
+    --label "org.opencontainers.image.revision=${revision}" \
+    --label "io.l9.e2e.node=${name}" \
     --build-context "l9ca=${CA_DIR}" \
     "${extra_ctx[@]}" \
     --build-arg "HTTPS_PROXY=${PROXY}" \
