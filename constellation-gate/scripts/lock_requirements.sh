@@ -15,10 +15,22 @@
 # `python scripts/validate_sdk_pin.py --verify-tag` detects. Re-run this script
 # to refresh it; never hand-edit requirements.lock.
 #
+# A refresh is scoped. The committed lock seeds uv's output file, which uv
+# treats as version preferences, and only constellation-node-sdk is upgraded:
+# re-resolving the SDK channel must not silently move unrelated packages. Set
+# LOCK_UPGRADE_ALL=1 for a deliberate, reviewable full dependency refresh.
+#
 # Usage: bash <this script>   (needs uv, curl, python3)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-uv pip compile pyproject.toml --python-version 3.12 --generate-hashes -o requirements.lock.tmp
+upgrade=(--upgrade-package constellation-node-sdk)
+if [[ "${LOCK_UPGRADE_ALL:-0}" == "1" ]]; then
+  upgrade=(--upgrade)
+  rm -f requirements.lock.tmp
+elif [[ -f requirements.lock ]]; then
+  cp requirements.lock requirements.lock.tmp
+fi
+uv pip compile pyproject.toml --python-version 3.12 --generate-hashes "${upgrade[@]}" -o requirements.lock.tmp
 python3 - <<'PY'
 import hashlib, re, subprocess, sys, urllib.request
 from pathlib import Path
