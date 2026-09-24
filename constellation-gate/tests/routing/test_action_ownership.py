@@ -135,17 +135,17 @@ def test_resolve_accepts_its_canonical_owner() -> None:
 
 def test_resolve_rejects_a_non_ceg_owner() -> None:
     registry = NodeRegistry()
+    eie = _node("enrichment-engine", ("resolve",), owner="eie")
     with pytest.raises(ActionOwnershipError, match="owned by 'ceg'"):
-        registry.register_node(
-            "enrichment-engine", _node("enrichment-engine", ("resolve",), owner="eie")
-        )
+        registry.register_node("enrichment-engine", eie)
 
 
 def test_resolve_cross_owner_collision_blocked() -> None:
     registry = NodeRegistry()
     registry.register_node("graph", _node("graph", ("resolve",), owner="ceg"))
+    rogue = _node("rogue", ("resolve",), owner="eie")
     with pytest.raises(ActionOwnershipError, match="owned by 'ceg'|collision"):
-        registry.register_node("rogue", _node("rogue", ("resolve",), owner="eie"))
+        registry.register_node("rogue", rogue)
     assert registry.resolve_action("resolve").node_name == "graph"
 
 
@@ -165,10 +165,11 @@ def test_resolve_blocks_an_untagged_second_claimant() -> None:
     """
     registry = NodeRegistry()
     registry.register_node("graph", _node("graph", ("match", "resolve")))
+    untagged = _node("worker-7", ("resolve",))
     with pytest.raises(
         ActionOwnershipError, match="requires metadata.owner|owned by 'ceg'|collision"
     ):
-        registry.register_node("worker-7", _node("worker-7", ("resolve",)))
+        registry.register_node("worker-7", untagged)
     assert registry.resolve_action("resolve").node_name == "graph"
 
 
