@@ -22,10 +22,3 @@
 # `l9-ci semgrep run --root .`. Leave it untracked so the scanner does not
 # treat vendor runtime as this repository's findings.
 /.l9/runtime/
-
-# E2E evidence bundles. The seam rail writes under the PACKAGE root
-# (constellation-gate/.l9/runtime/seam-e2e/) and the Docker rail under
-# constellation-gate/.l9/runtime/docker-e2e/. The anchored `/.l9/runtime/`
-# above only covers the repository root, so the nested package path needs its
-# own rule or every run's logs and receipts become tracked files.
-constellation-gate/.l9/runtime/
