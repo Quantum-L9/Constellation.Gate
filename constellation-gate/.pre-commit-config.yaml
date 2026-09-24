@@ -28,7 +28,15 @@ repos:
           - pydantic>=2.8.0
           - pyyaml>=6.0.2
           - types-PyYAML
-          - constellation-node-sdk @ git+https://github.com/Quantum-L9/Gate_SDK.git@0d50f64574f78a8ad9c32f5c4e13fcbf5644648e
+          # Same moving major channel as pyproject.toml: the hook environment
+          # has to resolve the same transport contract mypy checks against in
+          # CI. While both sides were pinned by hand they drifted — this held
+          # 0d50f64, which was 24 src/ files and ~2.6k lines behind the
+          # declared pin (transport/packet.py and transport/hashing.py among
+          # them), so the hook silently type-checked src/ against an SDK the
+          # package neither installs nor ships. One channel, declared once, is
+          # what stops the two sides diverging again.
+          - constellation-node-sdk @ git+https://github.com/Quantum-L9/Gate_SDK.git@v1
         files: ^src/
 
   - repo: local

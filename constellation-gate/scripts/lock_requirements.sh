@@ -3,16 +3,34 @@
 #
 # Every dependency is pinned to an exact version with sha256 hashes so the
 # image installs with `pip install --require-hashes`. constellation-node-sdk is
-# declared in pyproject.toml as a git dependency, which pip cannot hash-verify;
-# the lock therefore carries the SAME commit as GitHub's source archive URL
-# (github.com/<org>/<repo>/archive/<sha>.tar.gz) with the archive's sha256, so
-# the SDK is hash-verified like everything else and stays pinned to the release
-# commit named in Gate_SDK's RELEASE_IDENTITY_LEDGER.
+# declared in pyproject.toml as a git dependency on the moving major channel
+# `v1`, which pip cannot hash-verify; `uv pip compile` resolves that channel to
+# a concrete commit, and the rewrite below turns it into GitHub's source archive
+# URL (github.com/<org>/<repo>/archive/<sha>.tar.gz) with the archive's sha256.
+#
+# The sha in the lock is therefore the commit the channel resolved to at
+# generation time — reproducibility evidence, not the compatibility contract.
+# The contract stays `@v1` in pyproject.toml. When Gate_SDK advances the
+# channel this lock goes stale, which is what
+# `python scripts/validate_sdk_pin.py --verify-tag` detects. Re-run this script
+# to refresh it; never hand-edit requirements.lock.
+#
+# A refresh is scoped. The committed lock seeds uv's output file, which uv
+# treats as version preferences, and only constellation-node-sdk is upgraded:
+# re-resolving the SDK channel must not silently move unrelated packages. Set
+# LOCK_UPGRADE_ALL=1 for a deliberate, reviewable full dependency refresh.
 #
 # Usage: bash <this script>   (needs uv, curl, python3)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-uv pip compile pyproject.toml --python-version 3.12 --generate-hashes -o requirements.lock.tmp
+upgrade=(--upgrade-package constellation-node-sdk)
+if [[ "${LOCK_UPGRADE_ALL:-0}" == "1" ]]; then
+  upgrade=(--upgrade)
+  rm -f requirements.lock.tmp
+elif [[ -f requirements.lock ]]; then
+  cp requirements.lock requirements.lock.tmp
+fi
+uv pip compile pyproject.toml --python-version 3.12 --generate-hashes "${upgrade[@]}" -o requirements.lock.tmp
 python3 - <<'PY'
 import hashlib, re, subprocess, sys, urllib.request
 from pathlib import Path

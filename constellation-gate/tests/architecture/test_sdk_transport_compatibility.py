@@ -23,16 +23,23 @@ from constellation_node_sdk.transport.packet import TransportPacket, create_tran
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 
 
-def test_sdk_pin_is_an_exact_commit_not_a_floating_branch() -> None:
+def test_sdk_is_declared_on_the_moving_major_channel() -> None:
+    """The compatibility contract is Gate_SDK's `v1` channel, not a commit sha.
+
+    This assertion used to require a 40-character sha. That is what let Gate's
+    two declarations drift onto different SDKs (pyproject 69c6c67, pre-commit
+    0d50f64) while both looked "correctly pinned". Reproducibility now lives in
+    the generated requirements.lock; see scripts/validate_sdk_pin.py.
+    """
     text = PYPROJECT.read_text(encoding="utf-8")
 
     assert "Gate_SDK.git@main" not in text, "SDK must never float on main"
+    assert "Gate_SDK.git@master" not in text, "SDK must never float on master"
+    assert "cryptoxdog/Gate_SDK" not in text, "SDK must come from Quantum-L9"
     assert "Gate_SDK.git@" in text
 
-    pin = text.split("Gate_SDK.git@", 1)[1].split('"', 1)[0].strip()
-    assert len(pin) == 40 and all(c in "0123456789abcdef" for c in pin), (
-        f"SDK pin must be a full 40-char commit sha, got {pin!r}"
-    )
+    ref = text.split("Gate_SDK.git@", 1)[1].split('"', 1)[0].strip()
+    assert ref == "v1", f"SDK must be declared on the moving major channel v1, got {ref!r}"
 
 
 def test_derive_does_not_carry_parent_hops_into_the_child() -> None:
