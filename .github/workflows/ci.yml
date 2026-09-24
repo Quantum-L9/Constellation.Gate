@@ -32,12 +32,16 @@ jobs:
           python-version: "3.12"
           cache: "pip"
           cache-dependency-path: constellation-gate/pyproject.toml
+      # --only-binary :all: stops any index package from running a setup
+      # script at install time (SonarCloud githubactions:S8541). It governs
+      # index distributions only: this project and the Gate_SDK git
+      # dependency are still built from their own source trees.
       - name: Upgrade packaging toolchain
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --only-binary :all: --upgrade pip setuptools wheel
       - name: Install package with dev dependencies
         run: |
-          python -m pip install -e ".[dev]"
+          python -m pip install --only-binary :all: -e ".[dev]"
       - name: Ruff
         run: |
           ruff check src tests
@@ -53,3 +57,21 @@ jobs:
       - name: Contract invariants
         run: |
           python scripts/validate_contracts.py
+
+      # scripts/validate_sdk_pin.py existed but no workflow ran it, so three
+      # files drifted onto three different Gate_SDK commits unnoticed. It lives
+      # at the repository root, so both steps opt out of the workflow-level
+      # working-directory rather than reaching up with `../`.
+      - name: SDK release identity — active declarations (offline)
+        working-directory: .
+        run: |
+          python scripts/validate_sdk_pin.py
+
+      - name: SDK release identity — lock agrees with the v1 channel (networked)
+        working-directory: .
+        # Fails closed. This is the only check that catches a requirements.lock
+        # left behind after Gate_SDK advances the v1 channel; an unresolvable
+        # remote is a failure, not a warning, because an unverifiable lock has
+        # not been verified.
+        run: |
+          python scripts/validate_sdk_pin.py --verify-tag
