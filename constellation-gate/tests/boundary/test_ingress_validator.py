@@ -126,3 +126,27 @@ def test_scope_is_not_consulted_before_the_signature_is_verified() -> None:
     # A forged signature is an invalid packet (400), not an authorization verdict.
     with pytest.raises(IngressValidationError):
         _scoped_validator().validate(forged.model_dump_json_dict())
+
+
+def test_unsigned_packet_is_refused_when_scopes_are_configured() -> None:
+    from constellation_gate.boundary.ingress_validator import IngressAuthorizationError
+
+    # Signatures not mandatory (e.g. network trust mode): omitting the signature
+    # must not be a way around the caller's scope.
+    validator = IngressValidator(
+        local_node="gate",
+        require_signature=False,
+        key_resolver=_KEYS.get,
+        key_allowed_actions={"odoo-k1": ("converge", "match")},
+    )
+    packet = create_transport_packet(
+        action="sync",
+        payload={"entity_id": "42"},
+        tenant="tenant-a",
+        destination_node="gate",
+        source_node="odoo",
+        reply_to="odoo",
+    )
+
+    with pytest.raises(IngressAuthorizationError, match="unsigned"):
+        validator.validate(packet.model_dump_json_dict())

@@ -113,8 +113,14 @@ class IngressValidator:
     def _authorize_action(self, packet: TransportPacket) -> None:
         # Runs only after validate_transport_packet has verified the signature,
         # so signing_key_id is the caller's proven identity, not a claim.
-        if packet.security.signature is None:
+        if not self._key_allowed_actions:
             return
+        if packet.security.signature is None:
+            # Scopes are keyed by the signing key id; an unsigned packet cannot
+            # prove which scope applies, so it is refused rather than let through.
+            raise IngressAuthorizationError(
+                "unsigned packet refused: per-key action scopes are configured"
+            )
         key_id = packet.security.signing_key_id
         scope = self._key_allowed_actions.get(key_id or "")
         if scope is not None and packet.header.action not in scope:

@@ -255,9 +255,19 @@ def test_env_key_allowed_actions_rejects_malformed_scopes(
         _env_key_allowed_actions("L9_KEY_ALLOWED_ACTIONS_JSON")
 
 
+def test_settings_refuse_scopes_without_mandatory_signatures() -> None:
+    with pytest.raises(ValueError, match="L9_REQUIRE_SIGNATURE"):
+        GateSettings(
+            require_signature=False,
+            verifying_keys={"odoo-k1": "secret"},
+            key_allowed_actions={"odoo-k1": ("converge",)},
+        )
+
+
 def test_settings_refuse_a_scope_for_an_unknown_key_id() -> None:
     with pytest.raises(ValueError, match="odoo-typo"):
         GateSettings(
+            require_signature=True,
             verifying_keys={"odoo-k1": "secret"},
             key_allowed_actions={"odoo-typo": ("converge",)},
         )
@@ -269,6 +279,7 @@ def test_get_settings_loads_key_allowed_actions_from_env(monkeypatch: pytest.Mon
     monkeypatch.setenv(
         "L9_KEY_ALLOWED_ACTIONS_JSON", json.dumps({"odoo-k1": ["converge", "match"]})
     )
+    monkeypatch.setenv("L9_REQUIRE_SIGNATURE", "true")
     try:
         assert get_settings().key_allowed_actions == {"odoo-k1": ("converge", "match")}
     finally:

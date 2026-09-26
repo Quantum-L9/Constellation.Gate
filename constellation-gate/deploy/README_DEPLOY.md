@@ -89,7 +89,10 @@ L9_KEY_ALLOWED_ACTIONS_JSON={"odoo-k1": ["converge", "match"]}
 
 A listed key calling any other action gets `403 action_not_permitted`. Key ids
 that are not listed (worker nodes) keep unrestricted access, and a scope for
-a key id that is not in `L9_VERIFYING_KEYS_JSON` fails startup.
+a key id that is not in `L9_VERIFYING_KEYS_JSON` fails startup. Scopes require
+`L9_REQUIRE_SIGNATURE=true` (startup fails otherwise), and an unsigned packet is
+refused while any scope is configured — a scope is only as strong as the
+signature that proves the key id.
 
 Strongly recommended:
 

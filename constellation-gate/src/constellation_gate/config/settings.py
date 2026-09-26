@@ -222,6 +222,11 @@ class GateSettings(BaseModel):
     def validate_key_allowed_actions(self) -> GateSettings:
         # A scope for a key id Gate cannot verify is a typo that would leave the
         # real key unscoped; refuse it rather than guess.
+        # A scope is only as strong as the signature that proves the key id:
+        # without mandatory signatures a caller could omit the signature and
+        # skip its scope entirely, so scopes require L9_REQUIRE_SIGNATURE=true.
+        if self.key_allowed_actions and not self.require_signature:
+            raise ValueError("L9_KEY_ALLOWED_ACTIONS_JSON requires L9_REQUIRE_SIGNATURE=true")
         unknown = sorted(set(self.key_allowed_actions) - set(self.verifying_keys))
         if unknown:
             raise ValueError(
