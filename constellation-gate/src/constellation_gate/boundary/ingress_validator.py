@@ -14,6 +14,10 @@ class IngressValidationError(Exception):
     """Raised when a request fails Gate ingress validation."""
 
 
+class IngressAuthorizationError(Exception):
+    """Raised when a verified caller's key is not scoped to the requested action."""
+
+
 class IngressValidator:
     """
     Strict Gate ingress validator for canonical TransportPacket requests.
@@ -46,6 +50,7 @@ class IngressValidator:
         dev_mode: bool = False,
         verify_hop_signatures: bool = False,
         hop_key_resolver: Callable[[str | None], str | bytes | None] | None = None,
+        key_allowed_actions: dict[str, tuple[str, ...]] | None = None,
     ) -> None:
         self._local_node = local_node.strip().lower()
         self._known_nodes_provider = known_nodes_provider or (lambda: set())
@@ -66,6 +71,7 @@ class IngressValidator:
         self._dev_mode = dev_mode
         self._verify_hop_signatures = verify_hop_signatures
         self._hop_key_resolver = hop_key_resolver
+        self._key_allowed_actions = key_allowed_actions or {}
 
     def validate(self, body: dict[str, Any]) -> TransportPacket:
         """
@@ -99,6 +105,19 @@ class IngressValidator:
                 local_node=self._local_node,
                 known_nodes=self._known_nodes_provider(),
             )
-            return packet
         except Exception as exc:  # noqa: BLE001
             raise IngressValidationError(str(exc)) from exc
+        self._authorize_action(packet)
+        return packet
+
+    def _authorize_action(self, packet: TransportPacket) -> None:
+        # Runs only after validate_transport_packet has verified the signature,
+        # so signing_key_id is the caller's proven identity, not a claim.
+        if packet.security.signature is None:
+            return
+        key_id = packet.security.signing_key_id
+        scope = self._key_allowed_actions.get(key_id or "")
+        if scope is not None and packet.header.action not in scope:
+            raise IngressAuthorizationError(
+                f"key {key_id!r} is not permitted to invoke action {packet.header.action!r}"
+            )

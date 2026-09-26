@@ -103,3 +103,14 @@ def test_an_untrusted_worker_response_is_a_gateway_error_not_an_internal_one() -
     assert to_http_exception(outbound).status_code == 500, (
         "Gate failing to sign its own dispatch is Gate's fault, not the worker's"
     )
+
+
+def test_to_http_exception_maps_ingress_authorization_error_to_403() -> None:
+    from constellation_gate.boundary.ingress_validator import IngressAuthorizationError
+
+    exc = to_http_exception(
+        IngressAuthorizationError("key 'odoo-k1' is not permitted to invoke action 'sync'")
+    )
+
+    assert exc.status_code == 403
+    assert exc.detail["code"] == "action_not_permitted"

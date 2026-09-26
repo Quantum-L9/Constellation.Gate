@@ -79,6 +79,18 @@ one ingress trust boundary must also be declared (`L9_REQUIRE_SIGNATURE=true`
 with `L9_VERIFYING_KEYS_JSON`, or `L9_TRUSTED_INGRESS_BOUNDARY=network` with
 evidence) or startup fails; see `.env.example`.
 
+Consumers (callers that only send work, e.g. Odoo) do not register with Gate.
+They are admitted by adding their key id to `L9_VERIFYING_KEYS_JSON`, and
+limited to the actions they need with `L9_KEY_ALLOWED_ACTIONS_JSON`:
+
+```text
+L9_KEY_ALLOWED_ACTIONS_JSON={"odoo-k1": ["converge", "match"]}
+```
+
+A listed key calling any other action gets `403 action_not_permitted`. Key ids
+that are not listed (worker nodes) keep unrestricted access, and a scope for
+a key id that is not in `L9_VERIFYING_KEYS_JSON` fails startup.
+
 Strongly recommended:
 
 ```text

@@ -57,6 +57,32 @@ def _env_verifying_keys(name: str) -> dict[str, str]:
     return result
 
 
+def _env_key_allowed_actions(name: str) -> dict[str, tuple[str, ...]]:
+    """Parse {"key_id": ["action", ...]} from env into a per-key action allowlist.
+
+    Returns empty dict on missing or blank value (no key is scoped).
+    Raises ValueError on malformed JSON, a non-list value, or an empty list so
+    a mistyped scope fails startup instead of silently leaving a key unscoped.
+    """
+    raw = os.getenv(name, "").strip()
+    if not raw or raw == "{}":
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{name} is not valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{name} must be a JSON object")
+    result: dict[str, tuple[str, ...]] = {}
+    for key_id, actions in parsed.items():
+        if not isinstance(key_id, str) or not isinstance(actions, list):
+            raise ValueError(f"{name} must map key ids to lists of actions")
+        if not actions or not all(isinstance(a, str) and a.strip() for a in actions):
+            raise ValueError(f"{name} action lists must be non-empty lists of strings")
+        result[key_id.strip()] = tuple(a.strip().lower() for a in actions)
+    return result
+
+
 class GateSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -96,6 +122,10 @@ class GateSettings(BaseModel):
     signing_key_id: str | None = None
     signing_algorithm: str | None = None
     verifying_keys: dict[str, str] = Field(default_factory=dict)
+    # Per-key action scope. A verified signing_key_id listed here may invoke
+    # only its listed actions; key ids not listed keep unscoped access (worker
+    # nodes). This is how a consumer (e.g. Odoo) is limited to what it needs.
+    key_allowed_actions: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
     allowed_actions: tuple[str, ...] = ()
     allowed_packet_types: tuple[str, ...] = ("request", "command", "delegation", "replay_request")
@@ -187,6 +217,18 @@ class GateSettings(BaseModel):
                 raise ValueError("verifying_keys must not contain blank keys or values")
             normalized[rendered_key] = rendered_value
         return normalized
+
+    @model_validator(mode="after")
+    def validate_key_allowed_actions(self) -> GateSettings:
+        # A scope for a key id Gate cannot verify is a typo that would leave the
+        # real key unscoped; refuse it rather than guess.
+        unknown = sorted(set(self.key_allowed_actions) - set(self.verifying_keys))
+        if unknown:
+            raise ValueError(
+                "L9_KEY_ALLOWED_ACTIONS_JSON scopes key ids not in "
+                f"L9_VERIFYING_KEYS_JSON: {unknown}"
+            )
+        return self
 
     @field_validator("trusted_ingress_boundary")
     @classmethod
@@ -326,6 +368,7 @@ def get_settings() -> GateSettings:
         signing_key_id=os.getenv("L9_SIGNING_KEY_ID"),
         signing_algorithm=os.getenv("L9_SIGNING_ALGORITHM"),
         verifying_keys=verifying_keys,
+        key_allowed_actions=_env_key_allowed_actions("L9_KEY_ALLOWED_ACTIONS_JSON"),
         allowed_actions=_env_tuple("L9_ALLOWED_ACTIONS"),
         allowed_packet_types=_env_tuple(
             "L9_ALLOWED_PACKET_TYPES",
