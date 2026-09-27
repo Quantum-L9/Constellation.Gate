@@ -94,6 +94,16 @@ a key id that is not in `L9_VERIFYING_KEYS_JSON` fails startup. Scopes require
 refused while any scope is configured — a scope is only as strong as the
 signature that proves the key id.
 
+A consumer confirms its admission with `POST /v1/admission` (the Gate SDK's
+`GateClient.activate()` does this): a signed probe with the reserved action
+`gate.admission`, validated exactly like an execute request and never
+dispatched. Gate answers with a Gate-signed response packet whose payload
+(`l9.gate.admission.v1`) names the proven key id, whether the key is
+`restricted` or `unrestricted`, and the actions it may invoke right now (its
+scope intersected with the registered actions). An unknown key or a bad
+signature gets `400`, an unsigned probe `403`. `gate.admission` can be neither
+executed nor registered by a node.
+
 Strongly recommended:
 
 ```text

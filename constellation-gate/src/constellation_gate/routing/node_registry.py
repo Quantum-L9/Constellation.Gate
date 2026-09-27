@@ -12,6 +12,11 @@ from constellation_gate.routing.action_ownership import (
     owner_for_registration,
 )
 
+# Reserved action a consumer sends to POST /v1/admission to ask Gate which
+# actions its signing key may invoke. Never routable: /v1/execute refuses it and
+# no node may register it. Mirrors constellation_node_sdk ADMISSION_ACTION.
+ADMISSION_ACTION = "gate.admission"
+
 
 class NodeRegistration(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -61,6 +66,8 @@ class NodeRegistration(BaseModel):
             raise ValueError("supported_actions must not be empty")
         if len(set(normalized)) != len(normalized):
             raise ValueError("supported_actions must not contain duplicates")
+        if ADMISSION_ACTION in normalized:
+            raise ValueError(f"{ADMISSION_ACTION!r} is reserved by Gate and cannot be registered")
         return normalized
 
     @field_validator("priority_class")

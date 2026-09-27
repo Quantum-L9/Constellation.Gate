@@ -21,6 +21,7 @@ from constellation_gate.routing.node_registry import NodeRegistry
 from constellation_gate.runtime.http_client import AsyncHttpClientManager
 from constellation_gate.runtime.node_limits import PerNodeLimiterManager
 from constellation_gate.services.admin_registration_service import AdminRegistrationService
+from constellation_gate.services.admission_service import AdmissionService
 from constellation_gate.services.capability_service import CapabilityService
 from constellation_gate.services.execute_service import ExecuteService
 from constellation_gate.services.registry_query_service import RegistryQueryService
@@ -306,6 +307,16 @@ def get_execute_service() -> ExecuteService:
         registry=get_registry(),
         idempotency_ttl_seconds=settings.idempotency_ttl_seconds,
         response_margin_ms=settings.response_margin_ms,
+    )
+
+
+@lru_cache
+def get_admission_service() -> AdmissionService:
+    settings = get_gate_settings()
+    return AdmissionService(
+        local_node=settings.local_node,
+        ingress_validator=get_ingress_validator(),
+        registry=get_registry(),
     )
 
 
