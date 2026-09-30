@@ -6,6 +6,7 @@ from typing import Any
 from constellation_node_sdk.security.validation import validate_transport_packet
 from constellation_node_sdk.transport.packet import TransportPacket
 
+from constellation_gate.config.settings import CallerPolicy
 from constellation_gate.routing.node_registry import ADMISSION_ACTION
 
 from .routing_policy import validate_node_origin_policy
@@ -52,7 +53,8 @@ class IngressValidator:
         dev_mode: bool = False,
         verify_hop_signatures: bool = False,
         hop_key_resolver: Callable[[str | None], str | bytes | None] | None = None,
-        key_allowed_actions: dict[str, tuple[str, ...]] | None = None,
+        caller_policies: dict[str, CallerPolicy] | None = None,
+        require_caller_policy: bool = False,
     ) -> None:
         self._local_node = local_node.strip().lower()
         self._known_nodes_provider = known_nodes_provider or (lambda: set())
@@ -73,7 +75,8 @@ class IngressValidator:
         self._dev_mode = dev_mode
         self._verify_hop_signatures = verify_hop_signatures
         self._hop_key_resolver = hop_key_resolver
-        self._key_allowed_actions = key_allowed_actions or {}
+        self._caller_policies = caller_policies or {}
+        self._require_caller_policy = require_caller_policy
 
     def validate(self, body: dict[str, Any]) -> TransportPacket:
         """
@@ -95,9 +98,10 @@ class IngressValidator:
 
         The probe passes the same transport validation as an execute request
         (signature, freshness, replay, origin policy), so the key id it carries
-        is proven identity. The scope is ``None`` when the key is not scoped
-        (unrestricted), otherwise the actions the key may invoke. Gate decides;
-        the probe only asks.
+        is proven identity. The returned actions are that key's policy. ``None``
+        means local/dev has no caller policy configured. A key with no record
+        while a policy is in force is refused. The admission action itself is
+        not required to appear in the action list. Gate decides; the probe only asks.
         """
         packet = self._validate_packet(body, allowed_actions=None)
         if packet.header.action != ADMISSION_ACTION:
@@ -106,8 +110,10 @@ class IngressValidator:
             raise IngressAuthorizationError(
                 "admission requires a signed packet: an unsigned caller cannot prove its key id"
             )
-        scope = self._key_allowed_actions.get(packet.security.signing_key_id or "")
-        return packet, scope
+        policy = self._resolve_caller_policy(packet, check_action=False)
+        if policy is None:
+            return packet, None
+        return packet, policy.actions
 
     def _validate_packet(
         self, body: dict[str, Any], *, allowed_actions: tuple[str, ...] | None
@@ -147,17 +153,34 @@ class IngressValidator:
     def _authorize_action(self, packet: TransportPacket) -> None:
         # Runs only after validate_transport_packet has verified the signature,
         # so signing_key_id is the caller's proven identity, not a claim.
-        if not self._key_allowed_actions:
-            return
+        self._resolve_caller_policy(packet, check_action=True)
+
+    def _resolve_caller_policy(
+        self, packet: TransportPacket, *, check_action: bool
+    ) -> CallerPolicy | None:
+        """Return the caller's record, or None when local/dev has no policy map.
+
+        A key missing from a configured map is refused. Staging and prod refuse
+        a missing record even when the map itself is empty.
+        """
+        if not self._caller_policies and not self._require_caller_policy:
+            return None
         if packet.security.signature is None:
-            # Scopes are keyed by the signing key id; an unsigned packet cannot
-            # prove which scope applies, so it is refused rather than let through.
-            raise IngressAuthorizationError(
-                "unsigned packet refused: per-key action scopes are configured"
-            )
-        key_id = packet.security.signing_key_id
-        scope = self._key_allowed_actions.get(key_id or "")
-        if scope is not None and packet.header.action not in scope:
-            raise IngressAuthorizationError(
-                f"key {key_id!r} is not permitted to invoke action {packet.header.action!r}"
-            )
+            raise IngressAuthorizationError("unsigned packet refused: caller policy is in force")
+        key_id = packet.security.signing_key_id or ""
+        policy = self._caller_policies.get(key_id)
+        if policy is None:
+            msg = f"key {key_id!r} has no caller policy"
+            raise IngressAuthorizationError(msg)
+        source = packet.address.source_node.strip().lower()
+        if source != policy.node:
+            msg = f"key {key_id!r} is not permitted to claim source_node {source!r}"
+            raise IngressAuthorizationError(msg)
+        tenant = packet.tenant.org_id.strip().lower()
+        if tenant not in policy.tenants:
+            msg = f"key {key_id!r} is not permitted to act for tenant {tenant!r}"
+            raise IngressAuthorizationError(msg)
+        if check_action and packet.header.action not in policy.actions:
+            msg = f"key {key_id!r} is not permitted to invoke action {packet.header.action!r}"
+            raise IngressAuthorizationError(msg)
+        return policy

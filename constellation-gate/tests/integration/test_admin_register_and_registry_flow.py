@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from constellation_gate.api import dependencies as deps
 from constellation_gate.api.main import create_app
+from constellation_gate.config.settings import GateSettings
 from constellation_gate.routing.node_registry import NodeRegistry
 from constellation_gate.services.admin_registration_service import AdminRegistrationService
 from constellation_gate.services.registry_query_service import RegistryQueryService
@@ -17,8 +18,12 @@ def test_admin_register_then_registry_snapshot_flow() -> None:
 
     original_admin = deps.get_admin_registration_service
     original_registry = deps.get_registry_query_service
+    original_settings = deps.get_gate_settings
     deps.get_admin_registration_service = lambda: admin_service
     deps.get_registry_query_service = lambda: registry_service
+    deps.get_gate_settings = lambda: GateSettings(
+        environment="local", local_node="gate", admin_token="secret"
+    )
     try:
         client = TestClient(app)
 
@@ -43,7 +48,7 @@ def test_admin_register_then_registry_snapshot_flow() -> None:
         assert body["total_nodes"] == 1
         assert body["registered"][0]["node_name"] == "score"
 
-        registry_response = client.get("/v1/registry")
+        registry_response = client.get("/v1/registry", headers={"X-Admin-Token": "secret"})
         assert registry_response.status_code == 200
         snapshot = registry_response.json()
         assert "score" in snapshot
@@ -52,3 +57,4 @@ def test_admin_register_then_registry_snapshot_flow() -> None:
     finally:
         deps.get_admin_registration_service = original_admin
         deps.get_registry_query_service = original_registry
+        deps.get_gate_settings = original_settings

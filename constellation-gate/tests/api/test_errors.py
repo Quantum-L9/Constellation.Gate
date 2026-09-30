@@ -1,8 +1,19 @@
 from __future__ import annotations
 
 from constellation_gate.api.errors import to_http_exception
-from constellation_gate.boundary.ingress_validator import IngressValidationError
+from constellation_gate.boundary.ingress_validator import (
+    IngressAuthorizationError,
+    IngressValidationError,
+)
 from constellation_gate.boundary.routing_policy import RoutingPolicyError
+
+
+def test_to_http_exception_maps_caller_policy_refusal() -> None:
+    refusal = IngressAuthorizationError("key 'odoo-k1' is not permitted to invoke action 'sync'")
+    exc = to_http_exception(refusal)
+
+    assert exc.status_code == 403
+    assert exc.detail["code"] == "action_not_permitted"
 
 
 def test_to_http_exception_maps_ingress_validation_error() -> None:
