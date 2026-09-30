@@ -113,7 +113,8 @@ def get_ingress_validator() -> IngressValidator:
         dev_mode=settings.dev_mode,
         verify_hop_signatures=settings.verify_hop_signatures,
         hop_key_resolver=settings.resolve_verifying_key,
-        key_allowed_actions=settings.key_allowed_actions,
+        caller_policies=settings.caller_policies,
+        require_caller_policy=settings.caller_policy_required,
     )
 
 

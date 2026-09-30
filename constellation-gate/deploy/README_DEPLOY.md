@@ -80,19 +80,27 @@ with `L9_VERIFYING_KEYS_JSON`, or `L9_TRUSTED_INGRESS_BOUNDARY=network` with
 evidence) or startup fails; see `.env.example`.
 
 Consumers (callers that only send work, e.g. Odoo) do not register with Gate.
-They are admitted by adding their key id to `L9_VERIFYING_KEYS_JSON`, and
-limited to the actions they need with `L9_KEY_ALLOWED_ACTIONS_JSON`:
+They are admitted by adding their key id to `L9_VERIFYING_KEYS_JSON` and a
+caller policy record in `L9_KEY_ALLOWED_ACTIONS_JSON`. Each record binds the
+verified key to one node, one kind (`consumer` or `worker`), the tenants it
+may name, and the actions it may invoke:
 
 ```text
-L9_KEY_ALLOWED_ACTIONS_JSON={"odoo-k1": ["converge", "match"]}
+L9_KEY_ALLOWED_ACTIONS_JSON={"odoo-e2e":{"node":"odoo","kind":"consumer","tenants":["plasticos"],"actions":["converge","match"]}}
 ```
 
-A listed key calling any other action gets `403 action_not_permitted`. Key ids
-that are not listed (worker nodes) keep unrestricted access, and a scope for
-a key id that is not in `L9_VERIFYING_KEYS_JSON` fails startup. Scopes require
-`L9_REQUIRE_SIGNATURE=true` (startup fails otherwise), and an unsigned packet is
-refused while any scope is configured — a scope is only as strong as the
-signature that proves the key id.
+`odoo-e2e` may call `converge` and `match`. `sync`, a different `source_node`,
+or a tenant outside that list is `403 action_not_permitted`. In `staging` and
+`prod`, every id in `L9_VERIFYING_KEYS_JSON` must have a record or startup
+fails; a verified key with no record is not a full participant. Local and dev
+may boot with an empty map. A record for a key id that is not in
+`L9_VERIFYING_KEYS_JSON` fails startup. Policies require
+`L9_REQUIRE_SIGNATURE=true` (startup fails otherwise), and an unsigned packet
+is refused while any policy is in force.
+
+`GET /v1/registry` requires `X-Admin-Token`. The header is compared with
+`hmac.compare_digest` against `GATE_ADMIN_TOKEN`. A missing or wrong token
+returns `401` and no worker `internal_url`.
 
 A consumer confirms its admission with `POST /v1/admission` (the Gate SDK's
 `GateClient.activate()` does this): a signed probe with the reserved action

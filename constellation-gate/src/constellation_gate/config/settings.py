@@ -57,12 +57,69 @@ def _env_verifying_keys(name: str) -> dict[str, str]:
     return result
 
 
-def _env_key_allowed_actions(name: str) -> dict[str, tuple[str, ...]]:
-    """Parse {"key_id": ["action", ...]} from env into a per-key action allowlist.
+class CallerPolicy(BaseModel):
+    """What one verified signing key may claim and invoke.
 
-    Returns empty dict on missing or blank value (no key is scoped).
-    Raises ValueError on malformed JSON, a non-list value, or an empty list so
-    a mistyped scope fails startup instead of silently leaving a key unscoped.
+    Absence of a record is not full access. In staging and prod every verifying
+    key id must have one. Local and dev may load with an empty map.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    node: str
+    kind: str
+    tenants: tuple[str, ...]
+    actions: tuple[str, ...]
+
+    @field_validator("node", "kind")
+    @classmethod
+    def normalize_required_strings(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not normalized:
+            raise ValueError("caller policy node and kind must be non-empty")
+        return normalized
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, value: str) -> str:
+        if value not in {"consumer", "worker"}:
+            raise ValueError("caller policy kind must be consumer or worker")
+        return value
+
+    @field_validator("tenants", "actions")
+    @classmethod
+    def normalize_members(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(item.strip().lower() for item in value if item.strip())
+        if not normalized:
+            raise ValueError("caller policy tenants and actions must be non-empty")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("caller policy entries must not contain duplicates")
+        return normalized
+
+
+def _caller_policy_from_json(name: str, key_id: str, raw: Any) -> CallerPolicy:
+    if not isinstance(raw, dict):
+        msg = f"{name} entry for {key_id!r} must be an object of node, kind, tenants, actions"
+        raise ValueError(msg)
+    node = raw.get("node")
+    kind = raw.get("kind")
+    tenants = raw.get("tenants")
+    actions = raw.get("actions")
+    if not isinstance(node, str) or not isinstance(kind, str):
+        raise ValueError(f"{name} entry for {key_id!r} requires string node and kind")
+    if not isinstance(tenants, list) or not isinstance(actions, list):
+        raise ValueError(f"{name} entry for {key_id!r} requires list tenants and actions")
+    if not all(isinstance(item, str) for item in tenants + actions):
+        raise ValueError(f"{name} entry for {key_id!r} tenants and actions must be strings")
+    return CallerPolicy(node=node, kind=kind, tenants=tuple(tenants), actions=tuple(actions))
+
+
+def _env_caller_policies(name: str) -> dict[str, CallerPolicy]:
+    """Parse {key_id: {node, kind, tenants, actions}} from env.
+
+    Returns an empty dict on a missing or blank value. A list of actions, the
+    previous shape, is rejected so a leftover allowlist cannot boot as if it
+    still granted only actions and left node and tenant unbound.
     """
     raw = os.getenv(name, "").strip()
     if not raw or raw == "{}":
@@ -73,13 +130,11 @@ def _env_key_allowed_actions(name: str) -> dict[str, tuple[str, ...]]:
         raise ValueError(f"{name} is not valid JSON: {exc}") from exc
     if not isinstance(parsed, dict):
         raise ValueError(f"{name} must be a JSON object")
-    result: dict[str, tuple[str, ...]] = {}
-    for key_id, actions in parsed.items():
-        if not isinstance(key_id, str) or not isinstance(actions, list):
-            raise ValueError(f"{name} must map key ids to lists of actions")
-        if not actions or not all(isinstance(a, str) and a.strip() for a in actions):
-            raise ValueError(f"{name} action lists must be non-empty lists of strings")
-        result[key_id.strip()] = tuple(a.strip().lower() for a in actions)
+    result: dict[str, CallerPolicy] = {}
+    for key_id, record in parsed.items():
+        if not isinstance(key_id, str) or not key_id.strip():
+            raise ValueError(f"{name} key ids must be non-empty strings")
+        result[key_id.strip()] = _caller_policy_from_json(name, key_id.strip(), record)
     return result
 
 
@@ -122,10 +177,9 @@ class GateSettings(BaseModel):
     signing_key_id: str | None = None
     signing_algorithm: str | None = None
     verifying_keys: dict[str, str] = Field(default_factory=dict)
-    # Per-key action scope. A verified signing_key_id listed here may invoke
-    # only its listed actions; key ids not listed keep unscoped access (worker
-    # nodes). This is how a consumer (e.g. Odoo) is limited to what it needs.
-    key_allowed_actions: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+    # One record per signing key id. A verified key may claim only this node
+    # and these tenants, and may invoke only these actions.
+    caller_policies: dict[str, CallerPolicy] = Field(default_factory=dict)
 
     allowed_actions: tuple[str, ...] = ()
     allowed_packet_types: tuple[str, ...] = ("request", "command", "delegation", "replay_request")
@@ -219,21 +273,22 @@ class GateSettings(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_key_allowed_actions(self) -> GateSettings:
-        # A scope for a key id Gate cannot verify is a typo that would leave the
-        # real key unscoped; refuse it rather than guess.
-        # A scope is only as strong as the signature that proves the key id:
-        # without mandatory signatures a caller could omit the signature and
-        # skip its scope entirely, so scopes require L9_REQUIRE_SIGNATURE=true.
-        if self.key_allowed_actions and not self.require_signature:
+    def validate_caller_policies(self) -> GateSettings:
+        # A policy for a key id Gate cannot verify is a typo. A policy is only
+        # as strong as the signature that proves the key id.
+        if self.caller_policies and not self.require_signature:
             raise ValueError("L9_KEY_ALLOWED_ACTIONS_JSON requires L9_REQUIRE_SIGNATURE=true")
-        unknown = sorted(set(self.key_allowed_actions) - set(self.verifying_keys))
+        unknown = sorted(set(self.caller_policies) - set(self.verifying_keys))
         if unknown:
             raise ValueError(
-                "L9_KEY_ALLOWED_ACTIONS_JSON scopes key ids not in "
+                "L9_KEY_ALLOWED_ACTIONS_JSON names key ids not in "
                 f"L9_VERIFYING_KEYS_JSON: {unknown}"
             )
         return self
+
+    @property
+    def caller_policy_required(self) -> bool:
+        return self.environment in _TRUST_REQUIRED_ENVIRONMENTS
 
     @field_validator("trusted_ingress_boundary")
     @classmethod
@@ -339,6 +394,19 @@ class GateSettings(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_caller_policy_coverage(self) -> GateSettings:
+        """In staging and prod a verified key with no record is not a participant."""
+        if self.environment not in _TRUST_REQUIRED_ENVIRONMENTS:
+            return self
+        missing = sorted(set(self.verifying_keys) - set(self.caller_policies))
+        if missing:
+            raise ValueError(
+                "staging and prod require a caller policy for every verifying key id; "
+                f"missing: {missing}"
+            )
+        return self
+
     def resolve_verifying_key(self, key_id: str | None) -> str | bytes | None:
         if key_id is None:
             return None
@@ -373,7 +441,7 @@ def get_settings() -> GateSettings:
         signing_key_id=os.getenv("L9_SIGNING_KEY_ID"),
         signing_algorithm=os.getenv("L9_SIGNING_ALGORITHM"),
         verifying_keys=verifying_keys,
-        key_allowed_actions=_env_key_allowed_actions("L9_KEY_ALLOWED_ACTIONS_JSON"),
+        caller_policies=_env_caller_policies("L9_KEY_ALLOWED_ACTIONS_JSON"),
         allowed_actions=_env_tuple("L9_ALLOWED_ACTIONS"),
         allowed_packet_types=_env_tuple(
             "L9_ALLOWED_PACKET_TYPES",

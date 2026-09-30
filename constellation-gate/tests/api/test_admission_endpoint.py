@@ -65,12 +65,28 @@ def _registry() -> NodeRegistry:
     return registry
 
 
-def _validator(*, scopes: dict[str, tuple[str, ...]] | None = None) -> IngressValidator:
+def _policy(
+    *,
+    actions: tuple[str, ...] = ("converge", "match"),
+    node: str = "odoo",
+    tenants: tuple[str, ...] = ("plasticos",),
+):
+    from constellation_gate.config.settings import CallerPolicy
+
+    return CallerPolicy(node=node, kind="consumer", tenants=tenants, actions=actions)
+
+
+def _validator(*, scopes: dict | None = None) -> IngressValidator:
+    policies = (
+        {"odoo-k1": _policy()}
+        if scopes is None
+        else {key_id: _policy(actions=actions) for key_id, actions in scopes.items()}
+    )
     return IngressValidator(
         local_node="gate",
         require_signature=True,
         key_resolver=KEYS.get,
-        key_allowed_actions={"odoo-k1": ("converge", "match")} if scopes is None else scopes,
+        caller_policies=policies,
     )
 
 
@@ -101,12 +117,9 @@ def test_granted_actions_are_limited_to_what_is_registered() -> None:
     assert receipt["granted_actions"] == ["converge"]
 
 
-def test_unscoped_key_is_unrestricted() -> None:
-    receipt = _service().admit(_probe("eie-k1")).payload
-
-    assert receipt["scope"] == "unrestricted"
-    assert receipt["scoped_actions"] is None
-    assert receipt["granted_actions"] == ["converge", "match", "sync"]
+def test_key_missing_from_caller_policy_is_refused() -> None:
+    with pytest.raises(IngressAuthorizationError, match="no caller policy"):
+        _service().admit(_probe("eie-k1"))
 
 
 def test_response_is_addressed_back_to_the_caller() -> None:
