@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from constellation_gate.config.settings import GateSettings
+from constellation_gate.config.settings import CallerPolicy, GateSettings
 
 
 def _settings(**overrides) -> GateSettings:
@@ -34,6 +34,14 @@ def test_signature_boundary_satisfies_production() -> None:
     settings = _settings(
         require_signature=True,
         verifying_keys={"key-1": "secret-material"},
+        caller_policies={
+            "key-1": CallerPolicy(
+                node="graph",
+                kind="worker",
+                tenants=("tenant-a",),
+                actions=("sync",),
+            )
+        },
     )
     assert settings.require_signature is True
 
