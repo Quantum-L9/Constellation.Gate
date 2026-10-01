@@ -8,7 +8,10 @@ from constellation_node_sdk.gate_authority import (
 )
 from fastapi import HTTPException
 
-from constellation_gate.boundary.ingress_validator import IngressValidationError
+from constellation_gate.boundary.ingress_validator import (
+    IngressAuthorizationError,
+    IngressValidationError,
+)
 from constellation_gate.boundary.routing_policy import RoutingPolicyError
 from constellation_gate.resilience.backpressure import BackpressureExceededError
 from constellation_gate.resilience.circuit_breaker import CircuitBreakerOpenError
@@ -37,6 +40,15 @@ def to_http_exception(exc: Exception) -> HTTPException:
     """
     Map Gate-layer exceptions to safe HTTP responses.
     """
+    if isinstance(exc, IngressAuthorizationError):
+        return HTTPException(
+            status_code=403,
+            detail={
+                "code": "action_not_permitted",
+                "message": str(exc),
+            },
+        )
+
     if isinstance(exc, IngressValidationError):
         return HTTPException(
             status_code=400,

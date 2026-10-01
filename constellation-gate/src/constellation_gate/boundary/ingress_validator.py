@@ -6,12 +6,18 @@ from typing import Any
 from constellation_node_sdk.security.validation import validate_transport_packet
 from constellation_node_sdk.transport.packet import TransportPacket
 
+from constellation_gate.routing.node_registry import ADMISSION_ACTION
+
 from .routing_policy import validate_node_origin_policy
 from .transport_codec import decode_request_body
 
 
 class IngressValidationError(Exception):
     """Raised when a request fails Gate ingress validation."""
+
+
+class IngressAuthorizationError(Exception):
+    """Raised when a verified caller's key is not scoped to the requested action."""
 
 
 class IngressValidator:
@@ -46,6 +52,7 @@ class IngressValidator:
         dev_mode: bool = False,
         verify_hop_signatures: bool = False,
         hop_key_resolver: Callable[[str | None], str | bytes | None] | None = None,
+        key_allowed_actions: dict[str, tuple[str, ...]] | None = None,
     ) -> None:
         self._local_node = local_node.strip().lower()
         self._known_nodes_provider = known_nodes_provider or (lambda: set())
@@ -66,11 +73,45 @@ class IngressValidator:
         self._dev_mode = dev_mode
         self._verify_hop_signatures = verify_hop_signatures
         self._hop_key_resolver = hop_key_resolver
+        self._key_allowed_actions = key_allowed_actions or {}
 
     def validate(self, body: dict[str, Any]) -> TransportPacket:
         """
         Decode and validate a strict canonical TransportPacket request.
         """
+        packet = self._validate_packet(body, allowed_actions=self._allowed_actions or None)
+        if packet.header.action == ADMISSION_ACTION:
+            raise IngressValidationError(
+                f"{ADMISSION_ACTION!r} is reserved for POST /v1/admission and is not routable"
+            )
+        self._authorize_action(packet)
+        return packet
+
+    def validate_admission(
+        self, body: dict[str, Any]
+    ) -> tuple[TransportPacket, tuple[str, ...] | None]:
+        """
+        Validate an admission probe and return it with the caller's action scope.
+
+        The probe passes the same transport validation as an execute request
+        (signature, freshness, replay, origin policy), so the key id it carries
+        is proven identity. The scope is ``None`` when the key is not scoped
+        (unrestricted), otherwise the actions the key may invoke. Gate decides;
+        the probe only asks.
+        """
+        packet = self._validate_packet(body, allowed_actions=None)
+        if packet.header.action != ADMISSION_ACTION:
+            raise IngressValidationError(f"admission probes must use action {ADMISSION_ACTION!r}")
+        if packet.security.signature is None:
+            raise IngressAuthorizationError(
+                "admission requires a signed packet: an unsigned caller cannot prove its key id"
+            )
+        scope = self._key_allowed_actions.get(packet.security.signing_key_id or "")
+        return packet, scope
+
+    def _validate_packet(
+        self, body: dict[str, Any], *, allowed_actions: tuple[str, ...] | None
+    ) -> TransportPacket:
         try:
             packet = decode_request_body(body)
             validate_transport_packet(
@@ -86,7 +127,7 @@ class IngressValidator:
                 allow_private_attachment_hosts=self._allow_private_attachment_hosts,
                 allowed_clock_skew_seconds=self._allowed_clock_skew_seconds,
                 local_node=self._local_node,
-                allowed_actions=self._allowed_actions or None,
+                allowed_actions=allowed_actions,
                 allowed_packet_types=self._allowed_packet_types or None,
                 required_idempotency_actions=self._required_idempotency_actions or None,
                 replay_enabled=self._replay_enabled,
@@ -99,6 +140,24 @@ class IngressValidator:
                 local_node=self._local_node,
                 known_nodes=self._known_nodes_provider(),
             )
-            return packet
         except Exception as exc:  # noqa: BLE001
             raise IngressValidationError(str(exc)) from exc
+        return packet
+
+    def _authorize_action(self, packet: TransportPacket) -> None:
+        # Runs only after validate_transport_packet has verified the signature,
+        # so signing_key_id is the caller's proven identity, not a claim.
+        if not self._key_allowed_actions:
+            return
+        if packet.security.signature is None:
+            # Scopes are keyed by the signing key id; an unsigned packet cannot
+            # prove which scope applies, so it is refused rather than let through.
+            raise IngressAuthorizationError(
+                "unsigned packet refused: per-key action scopes are configured"
+            )
+        key_id = packet.security.signing_key_id
+        scope = self._key_allowed_actions.get(key_id or "")
+        if scope is not None and packet.header.action not in scope:
+            raise IngressAuthorizationError(
+                f"key {key_id!r} is not permitted to invoke action {packet.header.action!r}"
+            )

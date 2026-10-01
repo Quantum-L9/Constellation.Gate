@@ -123,6 +123,19 @@ def create_app() -> FastAPI:
         except Exception as exc:  # noqa: BLE001
             raise to_http_exception(exc) from exc
 
+    @app.post("/v1/admission")
+    async def admission(request: Request) -> JSONResponse:
+        """Tell a signed consumer which actions its key may invoke (no dispatch)."""
+        try:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError("request body must be a JSON object")
+            packet = deps.get_admission_service().admit(body)
+            packet = deps.sign_gate_response(packet)
+            return JSONResponse(content=packet.model_dump_json_dict())
+        except Exception as exc:  # noqa: BLE001
+            raise to_http_exception(exc) from exc
+
     @app.get("/v1/registry")
     async def registry_snapshot() -> dict[str, dict[str, Any]]:
         try:

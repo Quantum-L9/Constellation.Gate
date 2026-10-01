@@ -79,6 +79,31 @@ one ingress trust boundary must also be declared (`L9_REQUIRE_SIGNATURE=true`
 with `L9_VERIFYING_KEYS_JSON`, or `L9_TRUSTED_INGRESS_BOUNDARY=network` with
 evidence) or startup fails; see `.env.example`.
 
+Consumers (callers that only send work, e.g. Odoo) do not register with Gate.
+They are admitted by adding their key id to `L9_VERIFYING_KEYS_JSON`, and
+limited to the actions they need with `L9_KEY_ALLOWED_ACTIONS_JSON`:
+
+```text
+L9_KEY_ALLOWED_ACTIONS_JSON={"odoo-k1": ["converge", "match"]}
+```
+
+A listed key calling any other action gets `403 action_not_permitted`. Key ids
+that are not listed (worker nodes) keep unrestricted access, and a scope for
+a key id that is not in `L9_VERIFYING_KEYS_JSON` fails startup. Scopes require
+`L9_REQUIRE_SIGNATURE=true` (startup fails otherwise), and an unsigned packet is
+refused while any scope is configured — a scope is only as strong as the
+signature that proves the key id.
+
+A consumer confirms its admission with `POST /v1/admission` (the Gate SDK's
+`GateClient.activate()` does this): a signed probe with the reserved action
+`gate.admission`, validated exactly like an execute request and never
+dispatched. Gate answers with a Gate-signed response packet whose payload
+(`l9.gate.admission.v1`) names the proven key id, whether the key is
+`restricted` or `unrestricted`, and the actions it may invoke right now (its
+scope intersected with the registered actions). An unknown key or a bad
+signature gets `400`, an unsigned probe `403`. `gate.admission` can be neither
+executed nor registered by a node.
+
 Strongly recommended:
 
 ```text

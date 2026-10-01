@@ -210,3 +210,77 @@ def test_signing_key_without_id_fails_at_startup() -> None:
 def test_signing_key_id_without_key_fails_at_startup() -> None:
     with pytest.raises(ValidationError, match="L9_SIGNING_KEY is empty"):
         GateSettings(environment="local", local_node="gate", signing_key_id="gate-k1")
+
+
+def test_env_key_allowed_actions_parses_and_normalizes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from constellation_gate.config.settings import _env_key_allowed_actions
+
+    monkeypatch.setenv(
+        "L9_KEY_ALLOWED_ACTIONS_JSON", json.dumps({" odoo-k1 ": ["Converge", " match "]})
+    )
+
+    assert _env_key_allowed_actions("L9_KEY_ALLOWED_ACTIONS_JSON") == {
+        "odoo-k1": ("converge", "match")
+    }
+
+
+def test_env_key_allowed_actions_missing_returns_empty_dict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from constellation_gate.config.settings import _env_key_allowed_actions
+
+    monkeypatch.delenv("L9_KEY_ALLOWED_ACTIONS_JSON", raising=False)
+
+    assert _env_key_allowed_actions("L9_KEY_ALLOWED_ACTIONS_JSON") == {}
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "{not-json",
+        '["converge"]',
+        '{"odoo-k1": "converge"}',
+        '{"odoo-k1": []}',
+        '{"odoo-k1": [""]}',
+    ],
+)
+def test_env_key_allowed_actions_rejects_malformed_scopes(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    from constellation_gate.config.settings import _env_key_allowed_actions
+
+    monkeypatch.setenv("L9_KEY_ALLOWED_ACTIONS_JSON", raw)
+
+    with pytest.raises(ValueError):
+        _env_key_allowed_actions("L9_KEY_ALLOWED_ACTIONS_JSON")
+
+
+def test_settings_refuse_scopes_without_mandatory_signatures() -> None:
+    with pytest.raises(ValueError, match="L9_REQUIRE_SIGNATURE"):
+        GateSettings(
+            require_signature=False,
+            verifying_keys={"odoo-k1": "secret"},
+            key_allowed_actions={"odoo-k1": ("converge",)},
+        )
+
+
+def test_settings_refuse_a_scope_for_an_unknown_key_id() -> None:
+    with pytest.raises(ValueError, match="odoo-typo"):
+        GateSettings(
+            require_signature=True,
+            verifying_keys={"odoo-k1": "secret"},
+            key_allowed_actions={"odoo-typo": ("converge",)},
+        )
+
+
+def test_get_settings_loads_key_allowed_actions_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("L9_VERIFYING_KEYS_JSON", json.dumps({"odoo-k1": "secret"}))
+    monkeypatch.setenv(
+        "L9_KEY_ALLOWED_ACTIONS_JSON", json.dumps({"odoo-k1": ["converge", "match"]})
+    )
+    monkeypatch.setenv("L9_REQUIRE_SIGNATURE", "true")
+    try:
+        assert get_settings().key_allowed_actions == {"odoo-k1": ("converge", "match")}
+    finally:
+        get_settings.cache_clear()
