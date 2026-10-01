@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -21,6 +22,20 @@ from constellation_gate.runtime.routing_readiness import (
 )
 from constellation_gate.schemas.registry import RegisterNodesRequest
 from constellation_gate.services.capability_service import CapabilityAuthorizationError
+
+
+def _require_registry_admin_token(presented_token: str | None) -> None:
+    """Refuse GET /v1/registry unless the presented token matches Gate's admin token.
+
+    The snapshot includes every worker internal_url. A missing configured token
+    refuses the read rather than publishing that map.
+    """
+    expected = deps.get_gate_settings().admin_token
+    if expected is None or presented_token is None:
+        raise PermissionError("registry requires X-Admin-Token")
+    presented = presented_token.strip()
+    if not hmac.compare_digest(presented.encode(), expected.encode()):
+        raise PermissionError("registry admin token rejected")
 
 
 def create_app() -> FastAPI:
@@ -137,8 +152,11 @@ def create_app() -> FastAPI:
             raise to_http_exception(exc) from exc
 
     @app.get("/v1/registry")
-    async def registry_snapshot() -> dict[str, dict[str, Any]]:
+    async def registry_snapshot(
+        x_admin_token: str | None = Header(default=None),
+    ) -> dict[str, dict[str, Any]]:
         try:
+            _require_registry_admin_token(x_admin_token)
             service = deps.get_registry_query_service()
             return service.snapshot()
         except Exception as exc:  # noqa: BLE001

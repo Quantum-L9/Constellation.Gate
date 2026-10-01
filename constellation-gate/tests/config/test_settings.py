@@ -212,26 +212,43 @@ def test_signing_key_id_without_key_fails_at_startup() -> None:
         GateSettings(environment="local", local_node="gate", signing_key_id="gate-k1")
 
 
-def test_env_key_allowed_actions_parses_and_normalizes(monkeypatch: pytest.MonkeyPatch) -> None:
-    from constellation_gate.config.settings import _env_key_allowed_actions
+def _odoo_record(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "node": " Odoo ",
+        "kind": "Consumer",
+        "tenants": [" Tenant-A "],
+        "actions": ["Converge", " match "],
+    }
+    record.update(overrides)
+    return record
+
+
+def test_env_caller_policies_parse_and_normalize(monkeypatch: pytest.MonkeyPatch) -> None:
+    from constellation_gate.config.settings import CallerPolicy, _env_caller_policies
 
     monkeypatch.setenv(
-        "L9_KEY_ALLOWED_ACTIONS_JSON", json.dumps({" odoo-k1 ": ["Converge", " match "]})
+        "L9_KEY_ALLOWED_ACTIONS_JSON",
+        json.dumps({" odoo-k1 ": _odoo_record()}),
     )
 
-    assert _env_key_allowed_actions("L9_KEY_ALLOWED_ACTIONS_JSON") == {
-        "odoo-k1": ("converge", "match")
+    parsed = _env_caller_policies("L9_KEY_ALLOWED_ACTIONS_JSON")
+
+    assert parsed == {
+        "odoo-k1": CallerPolicy(
+            node="odoo",
+            kind="consumer",
+            tenants=("tenant-a",),
+            actions=("converge", "match"),
+        )
     }
 
 
-def test_env_key_allowed_actions_missing_returns_empty_dict(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from constellation_gate.config.settings import _env_key_allowed_actions
+def test_env_caller_policies_missing_returns_empty_dict(monkeypatch: pytest.MonkeyPatch) -> None:
+    from constellation_gate.config.settings import _env_caller_policies
 
     monkeypatch.delenv("L9_KEY_ALLOWED_ACTIONS_JSON", raising=False)
 
-    assert _env_key_allowed_actions("L9_KEY_ALLOWED_ACTIONS_JSON") == {}
+    assert _env_caller_policies("L9_KEY_ALLOWED_ACTIONS_JSON") == {}
 
 
 @pytest.mark.parametrize(
@@ -239,48 +256,90 @@ def test_env_key_allowed_actions_missing_returns_empty_dict(
     [
         "{not-json",
         '["converge"]',
+        '{"odoo-k1": ["converge", "match"]}',
         '{"odoo-k1": "converge"}',
-        '{"odoo-k1": []}',
-        '{"odoo-k1": [""]}',
+        json.dumps({"odoo-k1": _odoo_record(actions=[])}),
+        json.dumps({"odoo-k1": _odoo_record(kind="admin")}),
+        json.dumps({"odoo-k1": _odoo_record(tenants=[""])}),
     ],
 )
-def test_env_key_allowed_actions_rejects_malformed_scopes(
+def test_env_caller_policies_reject_malformed_records(
     monkeypatch: pytest.MonkeyPatch, raw: str
 ) -> None:
-    from constellation_gate.config.settings import _env_key_allowed_actions
+    from constellation_gate.config.settings import _env_caller_policies
 
     monkeypatch.setenv("L9_KEY_ALLOWED_ACTIONS_JSON", raw)
 
     with pytest.raises(ValueError):
-        _env_key_allowed_actions("L9_KEY_ALLOWED_ACTIONS_JSON")
+        _env_caller_policies("L9_KEY_ALLOWED_ACTIONS_JSON")
 
 
-def test_settings_refuse_scopes_without_mandatory_signatures() -> None:
+def test_settings_refuse_policies_without_mandatory_signatures() -> None:
+    from constellation_gate.config.settings import CallerPolicy
+
     with pytest.raises(ValueError, match="L9_REQUIRE_SIGNATURE"):
         GateSettings(
             require_signature=False,
             verifying_keys={"odoo-k1": "secret"},
-            key_allowed_actions={"odoo-k1": ("converge",)},
+            caller_policies={
+                "odoo-k1": CallerPolicy(
+                    node="odoo", kind="consumer", tenants=("tenant-a",), actions=("converge",)
+                )
+            },
         )
 
 
-def test_settings_refuse_a_scope_for_an_unknown_key_id() -> None:
+def test_settings_refuse_a_policy_for_an_unknown_key_id() -> None:
+    from constellation_gate.config.settings import CallerPolicy
+
     with pytest.raises(ValueError, match="odoo-typo"):
         GateSettings(
             require_signature=True,
             verifying_keys={"odoo-k1": "secret"},
-            key_allowed_actions={"odoo-typo": ("converge",)},
+            caller_policies={
+                "odoo-typo": CallerPolicy(
+                    node="odoo", kind="consumer", tenants=("tenant-a",), actions=("converge",)
+                )
+            },
         )
 
 
-def test_get_settings_loads_key_allowed_actions_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_local_settings_load_with_an_empty_caller_policy() -> None:
+    settings = GateSettings(environment="local", verifying_keys={"odoo-k1": "secret"})
+
+    assert settings.caller_policies == {}
+    assert settings.caller_policy_required is False
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_trust_environments_refuse_a_verifying_key_with_no_caller_policy(environment: str) -> None:
+    with pytest.raises(ValidationError, match="missing"):
+        GateSettings(
+            environment=environment,
+            require_signature=True,
+            verifying_keys={"odoo-k1": "secret"},
+            admin_token="admin-secret",
+        )
+
+
+def test_get_settings_loads_caller_policies_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from constellation_gate.config.settings import CallerPolicy
+
     get_settings.cache_clear()
     monkeypatch.setenv("L9_VERIFYING_KEYS_JSON", json.dumps({"odoo-k1": "secret"}))
     monkeypatch.setenv(
-        "L9_KEY_ALLOWED_ACTIONS_JSON", json.dumps({"odoo-k1": ["converge", "match"]})
+        "L9_KEY_ALLOWED_ACTIONS_JSON",
+        json.dumps({"odoo-k1": _odoo_record()}),
     )
     monkeypatch.setenv("L9_REQUIRE_SIGNATURE", "true")
     try:
-        assert get_settings().key_allowed_actions == {"odoo-k1": ("converge", "match")}
+        assert get_settings().caller_policies == {
+            "odoo-k1": CallerPolicy(
+                node="odoo",
+                kind="consumer",
+                tenants=("tenant-a",),
+                actions=("converge", "match"),
+            )
+        }
     finally:
         get_settings.cache_clear()

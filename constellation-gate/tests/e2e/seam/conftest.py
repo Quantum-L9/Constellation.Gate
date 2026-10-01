@@ -163,7 +163,11 @@ def constellation(
     deadline = time.monotonic() + 60
     snapshot: dict = {}
     while time.monotonic() < deadline:
-        snapshot = httpx.get(f"{ctx.gate_url}/v1/registry", timeout=5.0).json()
+        snapshot = httpx.get(
+            f"{ctx.gate_url}/v1/registry",
+            headers={"X-Admin-Token": ctx.admin_token},
+            timeout=5.0,
+        ).json()
         if "enrichment-engine" in snapshot and "graph" in snapshot:
             break
         time.sleep(1.0)
